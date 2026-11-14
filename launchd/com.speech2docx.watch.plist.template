@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.speech2docx.watch</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__ASR_HOME__/.venv/bin/python</string>
+    <string>__ASR_HOME__/watch.py</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>WorkingDirectory</key>
+  <string>__ASR_HOME__</string>
+  <key>StandardOutPath</key>
+  <string>__ASR_HOME__/logs/watch.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>__ASR_HOME__/logs/watch.stderr.log</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:__HOME__/.local/bin</string>
+    <key>LANG</key>
+    <string>en_US.UTF-8</string>
+    <key>LC_ALL</key>
+    <string>en_US.UTF-8</string>
+    <key>HOME</key>
+    <string>__HOME__</string>
+    <key>ASR_HOME</key>
+    <string>__ASR_HOME__</string>
+  </dict>
+</dict>
+</plist>

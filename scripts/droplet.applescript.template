@@ -1,0 +1,14 @@
+-- Speech2Docx droplet. __ASR_HOME__ is replaced at install time.
+on open droppedItems
+  set asrHome to "__ASR_HOME__"
+  set args to ""
+  repeat with f in droppedItems
+    set args to args & " " & quoted form of POSIX path of f
+  end repeat
+  do shell script "export PATH=/opt/homebrew/bin:/usr/local/bin:$PATH; /usr/bin/nohup " & quoted form of (asrHome & "/transcribe") & " --gui --notify --open" & args & " >/dev/null 2>&1 &"
+end open
+
+on run
+  set asrHome to "__ASR_HOME__"
+  do shell script "export PATH=/opt/homebrew/bin:/usr/local/bin:$PATH; " & quoted form of (asrHome & "/transcribe") & " --settings"
+end run
