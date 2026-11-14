@@ -6,7 +6,7 @@
 
 ---
 
-Local speech-to-text for macOS on Apple Silicon. Drop an MP3, M4A or WAV onto the app icon or a Desktop folder and a formatted Word document appears in Downloads.
+Local speech-to-text for macOS on Apple Silicon. Drop an MP3, M4A, WAV, or a video (MP4, MOV, MKV, WEBM, …) onto the app icon or a Desktop folder and a formatted Word document appears in Downloads. Video files are converted by extracting the soundtrack first.
 
 Audio is transcribed only on the machine. The first-run chooser preselects Local (LM Studio Qwen) so you can check accuracy before switching to a cloud model. By default the Word file also ends with an appendix, 附录：原始转录, containing the unpolished ASR text (turn this off in Settings). Optional polishing can use Local, or a signed-in Claude / ChatGPT / Gemini subscription, or an API key.
 
@@ -15,6 +15,7 @@ Audio is transcribed only on the machine. The first-run chooser preselects Local
 - **中文识别**：千问 Qwen3-ASR 1.7B（MLX，适合 Apple Silicon）
 - **藏文识别**：`tenzin/whisper-small-tibetan-ct2`（faster-whisper）
 - **长录音**：自动按约 8 分钟分片，可转 2 小时以上，支持中断后续传
+- **视频输入**：可把 MP4 / MOV / MKV / WEBM 等视频拖到应用、桌面文件夹或命令行，会先抽出音轨再转写
 - **佛教词库**：可编辑的专有名词表，同时用于识别提示和文字修饰
 - **自动修饰**：修正同音错字、去掉「啊 / 呃 / 嗯」、分段和标题；可加一段标明的「摘要」
 - **只输出 DOCX**：默认在文档末尾附「附录：原始转录」（未修饰原文，便于对照准确度）；可在设定中关闭。识别初稿同时保存在本机日志目录
@@ -48,7 +49,7 @@ cd Speech2Docx
 
 ### 应用 App
 
-把一个或多个音频文件拖到 Dock 或「应用程序」里的「语音转文字」图标上。开始和结束会有系统通知，完成后自动打开 Word 文档。
+把一个或多个音频或视频文件拖到 Dock 或「应用程序」里的「语音转文字」图标上。开始和结束会有系统通知，完成后自动打开 Word 文档。
 
 第一次使用会询问用哪一种模型修饰文字，并预选「本地（LM Studio 千问）」，建议先用本机测试准确度。以后只点击图标、不拖文件，即可打开设定：改模型、登录或填写金钥、编辑佛教词库、开关「附录：原始转录」。
 
@@ -65,6 +66,7 @@ cd Speech2Docx
 
 ```bash
 transcribe lecture.mp3
+transcribe lecture.mp4
 transcribe lecture.mp3 --lang zh
 transcribe lecture.mp3 --lang bo
 transcribe lecture.mp3 --polish local

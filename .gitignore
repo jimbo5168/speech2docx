@@ -7,6 +7,15 @@ __pycache__/
 *.mp3
 *.wav
 *.aiff
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.m4v
+*.avi
+*.vtt
+*.ass
+*.m4a
 logs/
 work/
 test/

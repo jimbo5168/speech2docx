@@ -26,6 +26,7 @@ if str(_SRC) not in sys.path:
 from config import load_config
 from glossary import as_hotwords, as_prompt_block, ensure_glossary
 from notify import notify
+from media import MEDIA_EXTS, extract_audio, is_video, media_duration
 from paths import (
     FFMPEG,
     FFPROBE,
@@ -42,10 +43,7 @@ TZ = ZoneInfo("America/Los_Angeles")
 LOCK_PATH = logs_dir() / "transcribe.lock"
 QWEN_MODEL_ID = "mlx-community/Qwen3-ASR-1.7B-8bit"
 TIBETAN_MODEL_ID = "tenzin/whisper-small-tibetan-ct2"
-AUDIO_EXTS = {
-    ".mp3", ".m4a", ".wav", ".aac", ".flac", ".ogg", ".opus",
-    ".wma", ".mp4", ".mov", ".caf", ".aiff", ".aif", ".m4b", ".webm", ".amr",
-}
+AUDIO_EXTS = MEDIA_EXTS  # audio + video; video soundtrack is extracted first
 LANG_TO_QWEN = {
     "zh": "Chinese", "yue": "Cantonese", "en": "English", "ja": "Japanese",
     "ko": "Korean", "de": "German", "es": "Spanish", "fr": "French",
@@ -420,8 +418,8 @@ def transcribe_file(
     src = src.expanduser().resolve()
     if not src.exists():
         raise FileNotFoundError(f"找不到文件：{src}")
-    if src.suffix.lower() not in AUDIO_EXTS:
-        raise ValueError(f"不支持的音频格式：{src.suffix}")
+    if src.suffix.lower() not in MEDIA_EXTS:
+        raise ValueError(f"不支持的音频或视频格式：{src.suffix}")
 
     out_dir = Path(out_dir).expanduser() if out_dir else default_out_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -431,19 +429,29 @@ def transcribe_file(
     cfg = load_config()
     chunk_s = float(cfg.get("chunk_seconds") or 480)
     overlap_s = float(cfg.get("overlap_seconds") or 4)
-    duration = audio_duration(src)
-    if do_notify:
-        notify("语音转文字", f"开始转写「{source_name}」（约 {int(duration//60)} 分钟）")
-
-    log(f"START {src.name} lang={lang} duration={duration:.1f}s")
-    t0 = time.perf_counter()
-
     jid = job_id_for(src)
     job = jobs_dir() / jid
     raw_chunks = job / "raw"
     wav_dir = job / "wav"
     raw_chunks.mkdir(parents=True, exist_ok=True)
     wav_dir.mkdir(parents=True, exist_ok=True)
+
+    media_src = src
+    if is_video(src):
+        extracted = job / "source.wav"
+        if not extracted.exists() or extracted.stat().st_size == 0:
+            log(f"EXTRACT audio from video {src.name}")
+            extract_audio(src, extracted)
+        media_src = extracted
+        log(f"VIDEO soundtrack ready: {extracted.name}")
+
+    duration = audio_duration(media_src) or media_duration(src)
+    if do_notify:
+        notify("语音转文字", f"开始转写「{source_name}」（约 {int(duration//60)} 分钟）")
+
+    log(f"START {src.name} lang={lang} duration={duration:.1f}s")
+    t0 = time.perf_counter()
+
     plan = plan_chunks(duration, chunk_s, overlap_s)
     (job / "meta.json").write_text(
         json.dumps({"source": str(src), "duration": duration, "chunks": len(plan), "lang": lang}, ensure_ascii=False, indent=2),
@@ -459,7 +467,7 @@ def transcribe_file(
                 log(f"RESUME chunk {i+1}/{len(plan)}")
                 continue
             wav = wav_dir / f"{i:03d}.wav"
-            to_wav16k(src, wav, start=start, duration=dur)
+            to_wav16k(media_src, wav, start=start, duration=dur)
             if lang == "bo":
                 text = transcribe_tibetan(wav)
             else:

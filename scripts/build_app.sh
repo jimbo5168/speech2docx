@@ -45,5 +45,20 @@ for ext in mp3 m4a wav aac flac ogg aiff caf; do
   /usr/libexec/PlistBuddy -c "Add :CFBundleDocumentTypes:0:CFBundleTypeExtensions:${idx} string ${ext}" "$INFO"
   idx=$((idx + 1))
 done
+# Video files (soundtrack is extracted with ffmpeg)
+/usr/libexec/PlistBuddy -c "Add :CFBundleDocumentTypes:1 dict" "$INFO"
+/usr/libexec/PlistBuddy -c "Add :CFBundleDocumentTypes:1:CFBundleTypeName string Video" "$INFO"
+/usr/libexec/PlistBuddy -c "Add :CFBundleDocumentTypes:1:CFBundleTypeRole string Viewer" "$INFO"
+/usr/libexec/PlistBuddy -c "Add :CFBundleDocumentTypes:1:LSHandlerRank string Alternate" "$INFO"
+/usr/libexec/PlistBuddy -c "Add :CFBundleDocumentTypes:1:LSItemContentTypes array" "$INFO"
+/usr/libexec/PlistBuddy -c "Add :CFBundleDocumentTypes:1:LSItemContentTypes:0 string public.movie" "$INFO"
+/usr/libexec/PlistBuddy -c "Add :CFBundleDocumentTypes:1:LSItemContentTypes:1 string public.mpeg-4" "$INFO"
+/usr/libexec/PlistBuddy -c "Add :CFBundleDocumentTypes:1:LSItemContentTypes:2 string com.apple.quicktime-movie" "$INFO"
+/usr/libexec/PlistBuddy -c "Add :CFBundleDocumentTypes:1:CFBundleTypeExtensions array" "$INFO"
+idx=0
+for ext in mp4 mov mkv webm m4v avi mpeg mpg 3gp wmv flv ts mts; do
+  /usr/libexec/PlistBuddy -c "Add :CFBundleDocumentTypes:1:CFBundleTypeExtensions:${idx} string ${ext}" "$INFO"
+  idx=$((idx + 1))
+done
 
 echo "$APP"
