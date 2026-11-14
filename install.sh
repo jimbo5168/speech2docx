@@ -41,6 +41,9 @@ fi
 # Copy runtime sources
 cp -f "$REPO_ROOT"/src/*.py "$ASR_HOME/"
 cp -f "$REPO_ROOT/scripts/list_drops.applescript" "$ASR_HOME/list_drops.applescript"
+rm -rf "$ASR_HOME/ui"
+mkdir -p "$ASR_HOME/ui"
+cp -f "$REPO_ROOT"/ui/* "$ASR_HOME/ui/"
 if [[ ! -f "$ASR_HOME/佛教词库.txt" ]]; then
   cp -f "$REPO_ROOT/佛教词库.txt" "$ASR_HOME/佛教词库.txt"
 fi
@@ -62,7 +65,13 @@ export ASR_HOME="${ASR_HOME}"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:\$PATH"
 exec "${ASR_HOME}/.venv/bin/python" "${ASR_HOME}/transcribe.py" "\$@"
 WRAP
-chmod +x "$ASR_HOME/transcribe" "$ASR_HOME/transcribe.py" "$ASR_HOME/watch.py"
+cat > "$ASR_HOME/gui-launch" << WRAP
+#!/bin/bash
+export ASR_HOME="${ASR_HOME}"
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:\$PATH"
+exec "${ASR_HOME}/.venv/bin/python" "${ASR_HOME}/gui.py" "\$@"
+WRAP
+chmod +x "$ASR_HOME/transcribe" "$ASR_HOME/transcribe.py" "$ASR_HOME/watch.py" "$ASR_HOME/gui.py" "$ASR_HOME/gui-launch"
 ln -sfn "$ASR_HOME/transcribe" "$HOME/.local/bin/transcribe"
 
 # Desktop drop folders via Finder (has Desktop TCC access)

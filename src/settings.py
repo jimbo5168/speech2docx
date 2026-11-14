@@ -115,22 +115,11 @@ return button returned of r
 
 
 def first_run_if_needed() -> None:
+    """Ensure a default local setup exists. No blocking dialog; settings live in the app window."""
     cfg = load_config()
     if cfg.get("configured"):
         return
-    picked = choose_provider("第一次使用：建议先用已预选的「本地（LM Studio 千问）」，识别和修饰都在本机完成，方便核对准确度。以后点图标（不拖文件）可以改。")
-    if not picked:
-        picked = "local"
-    cfg["polish_provider"] = picked
-    if picked in {"claude", "gpt", "gemini"}:
-        mode = _choose_auth_mode(picked) or "login"
-        cfg.setdefault("auth_mode", {})[picked] = mode
-        if mode == "api_key":
-            key = _prompt_api_key(picked)
-            if key:
-                keychain_set(picked, key)
-        else:
-            _offer_login_if_needed(picked)
+    cfg["polish_provider"] = cfg.get("polish_provider") or "local"
     cfg["configured"] = True
     save_config(cfg)
 

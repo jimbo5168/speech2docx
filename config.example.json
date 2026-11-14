@@ -17,5 +17,6 @@
   "overlap_seconds": 4,
   "include_raw_appendix": true,
   "template_path": "",
-  "english_output": "bilingual"
+  "english_output": "bilingual",
+  "out_dir": ""
 }

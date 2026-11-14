@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-Hans">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>语音转文字</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="hero">
+      <p class="hint">把音频或视频拖进来，或选择档案、文件夹，或贴上 YouTube 链接，转好的 Word 会放在输出位置。</p>
+    </header>
+
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="convert" type="button">转换</button>
+      <button class="tab" data-tab="settings" type="button">设定</button>
+    </nav>
+
+    <section id="panel-convert" class="panel active">
+      <div id="drop-zone" class="drop-zone">
+        <div class="drop-icon" aria-hidden="true">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/>
+            <path d="M14 3v5h5"/>
+            <path d="M12 11v6"/>
+            <path d="M9 14h6"/>
+          </svg>
+        </div>
+        <p class="drop-title">把音频或视频拖到这里</p>
+        <p class="drop-sub">也可以一次选多个档案，或选择整个文件夹</p>
+        <div class="row actions">
+          <button type="button" class="btn primary" id="btn-files">选择档案…</button>
+          <button type="button" class="btn" id="btn-folder">选择文件夹…</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <label class="field-label" for="youtube-url">YouTube 链接</label>
+        <div class="row">
+          <input id="youtube-url" type="text" spellcheck="false" placeholder="https://www.youtube.com/watch?v=…" />
+          <button type="button" class="btn primary" id="btn-url">转换</button>
+        </div>
+        <p class="help">如果影片有官方字幕，会自动用来校对。</p>
+      </div>
+
+      <div class="card split">
+        <div>
+          <p class="field-label">语言</p>
+          <div class="radios" id="lang-group">
+            <label><input type="radio" name="lang" value="zh" checked /> 中文</label>
+            <label><input type="radio" name="lang" value="en" /> 英文→中文</label>
+            <label><input type="radio" name="lang" value="bo" /> 藏文</label>
+            <label><input type="radio" name="lang" value="auto" /> 自动识别</label>
+          </div>
+        </div>
+        <div>
+          <p class="field-label">输出位置</p>
+          <div class="row">
+            <code id="out-path" class="path">~/Downloads</code>
+            <button type="button" class="btn" id="btn-outdir">更改…</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card queue-card">
+        <div class="queue-head">
+          <p class="field-label">转换队列</p>
+          <button type="button" class="btn link" id="btn-clear">清除已完成</button>
+        </div>
+        <div id="global-progress" class="progress hidden">
+          <div class="bar"><span id="global-bar"></span></div>
+          <p id="global-label" class="help"></p>
+        </div>
+        <div id="queue-empty" class="empty">还没有档案。选好以后会显示在这里。</div>
+        <ul id="queue" class="queue"></ul>
+      </div>
+    </section>
+
+    <section id="panel-settings" class="panel">
+      <div class="card">
+        <p class="field-label">修饰模型</p>
+        <p class="help">音频一律在本机识别。只有转好的文字才可能送到你选的云端模型。</p>
+        <div class="radios stack" id="provider-group">
+          <label><input type="radio" name="provider" value="local" /> 本地千问（推荐）</label>
+          <label><input type="radio" name="provider" value="claude" /> Claude</label>
+          <label><input type="radio" name="provider" value="gpt" /> GPT</label>
+          <label><input type="radio" name="provider" value="gemini" /> Gemini</label>
+        </div>
+        <div id="cloud-auth" class="auth hidden">
+          <p class="field-label">云端方式</p>
+          <div class="radios" id="auth-group">
+            <label><input type="radio" name="auth" value="login" /> 登录已有订阅</label>
+            <label><input type="radio" name="auth" value="api_key" /> 使用 API 金钥</label>
+          </div>
+          <p id="login-status" class="help"></p>
+          <div class="row">
+            <button type="button" class="btn" id="btn-login">打开登录…</button>
+          </div>
+          <div id="key-row" class="key-row hidden">
+            <input id="api-key" type="password" autocomplete="off" placeholder="在这里粘贴 API 金钥" />
+            <button type="button" class="btn primary" id="btn-save-key">保存金钥</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <label class="check"><input type="checkbox" id="opt-appendix" /> 在文档末尾附上「附录：原始转录」</label>
+        <p class="field-label tight">英文输出</p>
+        <div class="radios" id="english-group">
+          <label><input type="radio" name="english" value="bilingual" /> 中英对照</label>
+          <label><input type="radio" name="english" value="zh" /> 仅中文</label>
+        </div>
+      </div>
+
+      <div class="card">
+        <p class="field-label">佛教词库</p>
+        <p class="help">可自行增减专有名词，识别和修饰都会用到。</p>
+        <button type="button" class="btn" id="btn-glossary">编辑佛教词库…</button>
+      </div>
+
+      <div class="card">
+        <p class="field-label">Word 模板</p>
+        <p class="help">当前：<span id="template-name">默认版式</span></p>
+        <div class="row">
+          <button type="button" class="btn" id="btn-template">选择模板…</button>
+          <button type="button" class="btn" id="btn-template-reset">恢复默认模板</button>
+        </div>
+      </div>
+    </section>
+
+    <div id="toast" class="toast hidden" role="status"></div>
+  </div>
+  <script src="app.js"></script>
+</body>
+</html>

@@ -253,9 +253,10 @@ def download_url(url: str, dest_dir: Path) -> dict[str, Any]:
         "-o", outtmpl,
         "--write-subs",
         "--write-auto-subs",
-        "--sub-langs", "zh.*,zh,chi,en.*,en",
+        "--sub-langs", "zh,zh-Hans,zh-Hant,en",
         "--convert-subs", "srt",
         "--no-playlist",
+        "--js-runtimes", "node",
         url,
     ]
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)

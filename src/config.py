@@ -29,6 +29,7 @@ DEFAULTS: dict[str, Any] = {
     "include_raw_appendix": True,
     "template_path": "",
     "english_output": "bilingual",
+    "out_dir": "",
 }
 
 PROVIDERS = ("local", "claude", "gpt", "gemini")

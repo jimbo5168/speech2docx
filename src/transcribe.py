@@ -311,6 +311,15 @@ def set_run_font(run, lang: str, size=12) -> None:
 
 
 
+def emit_progress(on_progress, stage: str, percent=None, message: str = "") -> None:
+    if not on_progress:
+        return
+    try:
+        on_progress(stage, percent, message)
+    except Exception:
+        pass
+
+
 def format_duration(seconds: float) -> str:
     s = max(0, int(round(seconds)))
     h, rem = divmod(s, 3600)
@@ -566,6 +575,7 @@ def transcribe_file(
     open_docx: bool = False,
     sidecar_dirs: Optional[list[Path]] = None,
     subtitle_track: Optional[SubtitleTrack] = None,
+    on_progress=None,
 ) -> dict:
     ensure_glossary()
     src = src.expanduser().resolve()
@@ -594,6 +604,7 @@ def transcribe_file(
         extracted = job / "source.wav"
         if not extracted.exists() or extracted.stat().st_size == 0:
             log(f"EXTRACT audio from video {src.name}")
+            emit_progress(on_progress, "extract", 3, "正在抽取音轨…")
             extract_audio(src, extracted)
         media_src = extracted
         log(f"VIDEO soundtrack ready: {extracted.name}")
@@ -603,6 +614,7 @@ def transcribe_file(
         notify("语音转文字", f"开始转写「{source_name}」（约 {int(duration//60)} 分钟）")
 
     log(f"START {src.name} lang={lang} duration={duration:.1f}s")
+    emit_progress(on_progress, "transcribe", 5, "开始识别…")
     t0 = time.perf_counter()
 
     plan = plan_chunks(duration, chunk_s, overlap_s)
@@ -618,6 +630,8 @@ def transcribe_file(
             if raw_path.exists() and raw_path.stat().st_size > 0:
                 texts.append(raw_path.read_text(encoding="utf-8"))
                 log(f"RESUME chunk {i+1}/{len(plan)}")
+                pct = 5 + int(70 * (i + 1) / max(len(plan), 1))
+                emit_progress(on_progress, "transcribe", pct, f"沿用已识别片段 {i+1}/{len(plan)}")
                 continue
             wav = wav_dir / f"{i:03d}.wav"
             to_wav16k(media_src, wav, start=start, duration=dur)
@@ -632,6 +646,8 @@ def transcribe_file(
             except OSError:
                 pass
             log(f"ASR chunk {i+1}/{len(plan)} start={start:.0f}s chars={len(text)}")
+            pct = 5 + int(70 * (i + 1) / max(len(plan), 1))
+            emit_progress(on_progress, "transcribe", pct, f"正在识别 {i+1}/{len(plan)}…")
 
     # Drop overlap repetition lightly: if adjacent chunks share a long tail/head, keep later start unique
     raw_full = "\n".join(t.strip() for t in texts if t.strip())
@@ -646,6 +662,7 @@ def transcribe_file(
     highlight_phrases: list[str] = []
     working = list(texts)
     if track and track.cues:
+        emit_progress(on_progress, "proofread", 78, "正在用字幕校对…")
         triples = []
         for i, text in enumerate(texts):
             start, dur = plan[i] if i < len(plan) else (0.0, 0.0)
@@ -670,6 +687,7 @@ def transcribe_file(
     title_zh = ""
     if lang == "en":
         english_paras = [t.strip() for t in working if str(t).strip()]
+        emit_progress(on_progress, "polish", 86, "正在翻译成中文…")
         if polish == "none":
             sections = [{"heading": "", "paragraphs": english_paras}]
             provider_used = "none"
@@ -691,6 +709,7 @@ def transcribe_file(
                 bilingual_pairs = None
             log(f"TRANSLATE en->zh via {provider_used} pairs={len(tr.get('pairs') or [])}")
     else:
+        emit_progress(on_progress, "polish", 86, "正在修饰文字…")
         for i, text in enumerate(working):
             if not text.strip():
                 continue
@@ -700,6 +719,8 @@ def transcribe_file(
                 notes.append(result["note"])
             sections.append({"heading": result.get("heading") or "", "paragraphs": result["paragraphs"]})
             log(f"POLISH chunk {i+1}/{len(texts)} via {provider_used}")
+            pct = 86 + int(8 * (i + 1) / max(len(working), 1))
+            emit_progress(on_progress, "polish", min(pct, 94), f"正在修饰 {i+1}/{len(working)}…")
 
     summary = ""
     all_paras = [p for s in sections for p in s.get("paragraphs") or []]
@@ -718,6 +739,7 @@ def transcribe_file(
     label_map = {"local": "本地千问", "claude": "Claude", "gpt": "GPT", "gemini": "Gemini", "none": "未修饰"}
     note = "；".join(dict.fromkeys(notes))
     include_raw = bool(cfg.get("include_raw_appendix", True))
+    emit_progress(on_progress, "write", 96, "正在生成 Word 文档…")
     docx_path = write_docx(
         out_dir / f"{stem}.docx",
         title=stem,
@@ -737,6 +759,7 @@ def transcribe_file(
     elapsed = time.perf_counter() - t0
     rtf_x = (duration / elapsed) if elapsed > 0 else 0.0
     log(f"DONE {src.name} -> {docx_path.name} audio={duration:.1f}s elapsed={elapsed:.1f}s ({rtf_x:.1f}x)")
+    emit_progress(on_progress, "done", 100, "完成")
     if do_notify:
         notify("语音转文字", f"已完成「{docx_path.name}」，保存在下载文件夹")
     if open_docx:
@@ -772,11 +795,13 @@ def _transcribe_arg(
     polish: Optional[str],
     do_notify: bool,
     open_docx: bool,
+    on_progress=None,
 ) -> dict:
     if is_media_url(value):
         dest = work_dir() / "url-downloads" / hashlib.sha1(value.encode()).hexdigest()[:12]
         dest.mkdir(parents=True, exist_ok=True)
         log(f"DOWNLOAD {value}")
+        emit_progress(on_progress, "download", 2, "正在获取视频和字幕…")
         info = download_url(value, dest)
         media: Path = info["media"]
         stem = _safe_stem(info.get("title") or media.stem)
@@ -791,6 +816,7 @@ def _transcribe_arg(
             open_docx=open_docx,
             sidecar_dirs=[dest],
             subtitle_track=info.get("track"),
+            on_progress=on_progress,
         )
     path = Path(value).expanduser()
     return transcribe_file(
@@ -801,6 +827,7 @@ def _transcribe_arg(
         do_notify=do_notify,
         open_docx=open_docx,
         sidecar_dirs=[path.parent],
+        on_progress=on_progress,
     )
 
 
@@ -817,17 +844,19 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--no-polish", action="store_true", help="只转写、不修饰")
     args = parser.parse_args(argv)
 
-    if args.settings or not args.files:
-        from settings import run_settings_menu
-        run_settings_menu()
-        if not args.files:
-            return 0
+    if args.settings or (not args.files and args.gui):
+        from gui import main as gui_main
+        return gui_main([])
+
+    if not args.files:
+        from gui import main as gui_main
+        return gui_main([])
 
     if args.no_polish:
         args.polish = "none"
 
-    # First-run chooser only when the user is in an interactive app/CLI without --polish
-    if args.polish is None and (args.gui or sys.stdin.isatty()):
+    # CLI still uses saved settings; first launch defaults to local with no dialog.
+    if args.polish is None:
         from settings import first_run_if_needed
         first_run_if_needed()
 

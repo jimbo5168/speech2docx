@@ -50,11 +50,35 @@ cd Speech2Docx
 
 ## 用法 Usage
 
-### 应用 App
+点 Dock 或「应用程序」里的「语音转文字」，就会打开应用窗口。第一次使用默认已选「本地千问」，可在窗口的「设定」页随时更改。
 
-把一个或多个音频或视频文件拖到 Dock 或「应用程序」里的「语音转文字」图标上。开始和结束会有系统通知，完成后自动打开 Word 文档。
+把音频或视频拖进来，或选择档案、文件夹，或贴上 YouTube 链接，转好的 Word 会放在输出位置（默认为「下载」文件夹）。
 
-第一次使用会询问用哪一种模型修饰文字，并预选「本地（LM Studio 千问）」，建议先用本机测试准确度。以后只点击图标、不拖文件，即可打开设定：改模型、登录或填写金钥、编辑佛教词库、开关「附录：原始转录」。
+Click the Dock or Applications icon to open the window. You can drop files onto the window, choose files or a folder, or paste a YouTube link. Finished Word documents go to the output folder (Downloads by default). Dragging files onto the Dock icon still works and will queue them in the same window.
+
+### 使用方法 How to use
+
+1. 打开「语音转文字」
+2. 选择语言：中文、英文→中文，或藏文
+3. 用下面任一方式加入内容：
+   - 把档案拖到窗口里，或点「选择档案…」
+   - 点「选择文件夹…」，处理文件夹里的音视频
+   - 贴上 YouTube 链接，再点「转换」（有官方字幕时会用来校对）
+4. 需要的话点「更改…」另选输出位置
+5. 队列里会显示「等待 / 转录中 / 校对中 / 修饰中 / 完成 / 失败」。完成后可「打开文档」或「在 Finder 中显示」
+6. 「设定」页可改修饰模型、附录、英文对照、佛教词库和 Word 模板
+
+![主画面](docs/gui-main.png)
+
+![转换中](docs/gui-processing.png)
+
+![转换完成](docs/gui-done.png)
+
+![设定](docs/gui-settings.png)
+
+### 应用图标 App icon
+
+也可以把档案直接拖到 Dock 上的「语音转文字」图标，文件会加入同一窗口的队列。
 
 ### 桌面文件夹 Drop folders
 
@@ -111,6 +135,8 @@ Speech2Docx/           本仓库
   scripts/             打包应用、图标
   launchd/             监视器模板
   templates/default.docx  版式模板（无讲课正文）
+  ui/                    应用窗口界面
+  docs/                  使用截图
   install.sh
 ```
 

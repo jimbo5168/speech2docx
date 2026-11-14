@@ -1,14 +1,64 @@
--- Speech2Docx droplet. __ASR_HOME__ is replaced at install time.
-on open droppedItems
-  set asrHome to "__ASR_HOME__"
+-- Speech2Docx app wrapper. __ASR_HOME__ is replaced at install time.
+property pingURL : "http://127.0.0.1:17834/ping"
+
+on asrHome()
+  return "__ASR_HOME__"
+end asrHome
+
+on launchCmd()
+  return quoted form of (asrHome() & "/gui-launch")
+end launchCmd
+
+on isUp()
+  try
+    do shell script "curl -s --max-time 0.4 " & pingURL
+    return true
+  on error
+    return false
+  end try
+end isUp
+
+on startGui(argLine)
+  if not isUp() then
+    do shell script "export PATH=/opt/homebrew/bin:/usr/local/bin:$PATH; /usr/bin/nohup " & launchCmd() & " " & argLine & " >/dev/null 2>&1 &"
+    repeat 50 times
+      if isUp() then exit repeat
+      delay 0.15
+    end repeat
+  else if argLine is not "" then
+    do shell script launchCmd() & " " & argLine
+  end if
+  try
+    do shell script "curl -s --max-time 0.4 -X POST http://127.0.0.1:17834/focus"
+  end try
+end startGui
+
+on waitUntilQuit()
+  delay 0.8
+  repeat
+    if not isUp() then exit repeat
+    delay 0.4
+  end repeat
+end waitUntilQuit
+
+on pathsFrom(droppedItems)
   set args to ""
   repeat with f in droppedItems
     set args to args & " " & quoted form of POSIX path of f
   end repeat
-  do shell script "export PATH=/opt/homebrew/bin:/usr/local/bin:$PATH; /usr/bin/nohup " & quoted form of (asrHome & "/transcribe") & " --gui --notify --open" & args & " >/dev/null 2>&1 &"
-end open
+  return args
+end pathsFrom
 
 on run
-  set asrHome to "__ASR_HOME__"
-  do shell script "export PATH=/opt/homebrew/bin:/usr/local/bin:$PATH; " & quoted form of (asrHome & "/transcribe") & " --settings"
+  startGui("")
+  waitUntilQuit()
 end run
+
+on open droppedItems
+  startGui(pathsFrom(droppedItems))
+  waitUntilQuit()
+end open
+
+on reopen
+  startGui("")
+end reopen
