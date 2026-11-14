@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from config import CLOUD_PROVIDERS, KEYCHAIN_SERVICE, load_config
-from glossary import as_prompt_block
+from glossary import as_prompt_block, as_translation_glossary
 from paths import asr_home, work_dir
 
 SYSTEM_PROMPT = """你是一位严谨的汉传与藏传佛教讲记文字编辑。请润色下面的语音识别初稿。
@@ -232,7 +232,7 @@ def _parse_json_obj(text: str) -> Optional[dict]:
                 obj = json.loads(payload)
             except Exception:
                 continue
-            if isinstance(obj, dict) and "paragraphs" in obj:
+            if isinstance(obj, dict) and any(k in obj for k in ("paragraphs", "pairs", "heading", "title_zh", "heading_zh")):
                 return obj
     return None
 
@@ -534,3 +534,96 @@ def _safe_err(exc: BaseException) -> str:
 def _fallback_paragraphs(text: str) -> list[str]:
     parts = [p.strip() for p in text.replace("\r", "\n").split("\n") if p.strip()]
     return parts or ([text.strip()] if text.strip() else [])
+
+
+TRANSLATE_PROMPT = """你是一位严谨的汉传与藏传佛教讲记译者。请把下面的英文讲课记录译成规范简体中文。
+规则：
+1. 忠实原文，不增删教义，不添解释。
+2. 专有名词必须按词库翻译，例如 bodhicitta 译为菩提心，ngondro 或 preliminary practices 译为前行。
+3. 只输出 JSON，不要 Markdown，不要思考过程。格式：
+{"title_zh":"中文标题，若无明显标题可留空","heading_zh":"本节小标题，可留空","pairs":[{"en":"英文原段","zh":"对应中文"}]}
+4. pairs 按自然段划分，en 保持原意不断句错乱，zh 为对应译文。
+"""
+
+
+def translate_english(
+    paragraphs: list[str],
+    provider: Optional[str] = None,
+    title: str = "",
+) -> dict:
+    """Translate English paragraphs into Simplified Chinese.
+
+    Returns {pairs:[{en,zh}], title_zh, heading_zh, provider_used, note}.
+    """
+    cfg = load_config()
+    wanted = (provider or cfg.get("polish_provider") or "local").lower()
+    if wanted not in {"local", "claude", "gpt", "gemini"}:
+        wanted = "local"
+    auth_mode = (cfg.get("auth_mode") or {}).get(wanted, "login")
+    paras = [str(p).strip() for p in paragraphs if str(p).strip()]
+    if not paras:
+        return {"pairs": [], "title_zh": "", "heading_zh": "", "provider_used": "none", "note": "没有可翻译的英文"}
+
+    glossary = as_translation_glossary()
+    payload = ""
+    if glossary:
+        payload += "佛教英译词库：\n" + glossary + "\n\n"
+    if title:
+        payload += "英文标题：" + title + "\n\n"
+    payload += "英文正文：\n" + "\n\n".join(paras)
+
+    def _parse(out: str) -> dict:
+        parsed = _parse_json_obj(out) or {}
+        pairs = []
+        raw_pairs = parsed.get("pairs") or parsed.get("paragraphs") or []
+        if isinstance(raw_pairs, list):
+            for item in raw_pairs:
+                if isinstance(item, dict):
+                    en = str(item.get("en") or item.get("english") or item.get("src") or "").strip()
+                    zh = str(item.get("zh") or item.get("chinese") or item.get("text") or "").strip()
+                    if en or zh:
+                        pairs.append({"en": en, "zh": zh})
+                elif isinstance(item, str) and item.strip():
+                    pairs.append({"en": "", "zh": item.strip()})
+        if not pairs:
+            # plain text fallback: treat whole output as Chinese, keep English source
+            zh_text = (out or "").strip().replace("```", "")
+            if zh_text and not zh_text.lstrip().startswith("{"):
+                for src, zh in zip(paras, [zh_text] + [""] * (len(paras) - 1)):
+                    pairs.append({"en": src, "zh": zh})
+        return {
+            "title_zh": str(parsed.get("title_zh") or "").strip(),
+            "heading_zh": str(parsed.get("heading_zh") or parsed.get("heading") or "").strip(),
+            "pairs": pairs,
+        }
+
+    note = ""
+    used = wanted
+    try:
+        out = _call_backend(wanted, auth_mode, payload, TRANSLATE_PROMPT, cfg)
+        result = _parse(out)
+        if not result["pairs"] or not any(p.get("zh") for p in result["pairs"]):
+            raise RuntimeError("翻译结果为空")
+        used = wanted
+    except Exception as exc:
+        if wanted != "local":
+            try:
+                out = _call_backend("local", "login", payload, TRANSLATE_PROMPT, cfg)
+                result = _parse(out)
+                if not result["pairs"] or not any(p.get("zh") for p in result["pairs"]):
+                    raise RuntimeError("翻译结果为空")
+                used = "local"
+                note = f"原选 {wanted} 不可用（{_safe_err(exc)}），已改用本地千问翻译。"
+            except Exception as exc2:
+                result = {"title_zh": "", "heading_zh": "", "pairs": [{"en": p, "zh": ""} for p in paras]}
+                used = "none"
+                note = f"翻译失败（{_safe_err(exc)}；本地亦失败：{_safe_err(exc2)}），已只保留英文原文。"
+        else:
+            result = {"title_zh": "", "heading_zh": "", "pairs": [{"en": p, "zh": ""} for p in paras]}
+            used = "none"
+            note = f"本地千问翻译失败（{_safe_err(exc)}），已只保留英文原文。"
+    result["provider_used"] = used
+    result["note"] = note
+    return result
+
+

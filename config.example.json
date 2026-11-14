@@ -16,5 +16,6 @@
   "chunk_seconds": 480,
   "overlap_seconds": 4,
   "include_raw_appendix": true,
-  "template_path": ""
+  "template_path": "",
+  "english_output": "bilingual"
 }

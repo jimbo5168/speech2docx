@@ -28,6 +28,7 @@ DEFAULTS: dict[str, Any] = {
     "overlap_seconds": 4,
     "include_raw_appendix": True,
     "template_path": "",
+    "english_output": "bilingual",
 }
 
 PROVIDERS = ("local", "claude", "gpt", "gemini")

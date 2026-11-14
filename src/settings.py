@@ -147,6 +147,7 @@ def show_current() -> str:
         f"模型编号（可在设定文件里改）：{models.get(p, '')}",
         f"附录：原始转录：{'开' if cfg.get('include_raw_appendix', True) else '关'}",
         f"Word 模板：{cfg.get('template_path') or '默认版式'}",
+        f"英文输出：{'中英对照' if cfg.get('english_output', 'bilingual') == 'bilingual' else '仅中文'}",
     ]
     for name, info in st.items():
         inst = "已安装" if info.get("installed") else "未安装"
@@ -210,13 +211,33 @@ def _reset_template() -> None:
     _osascript('display dialog "已恢复为内置默认版式。" buttons {"好"} default button "好" with title "语音转文字"')
 
 
+
+def _toggle_english_output() -> None:
+    cfg = load_config()
+    current = cfg.get("english_output", "bilingual")
+    default_btn = "中英对照" if current == "bilingual" else "仅中文"
+    script = (
+        "set r to display dialog \"英文录音译成中文后，Word 要怎么排？\" "
+        "buttons {\"仅中文\", \"中英对照\"} default button \"%s\" with title \"语音转文字\"\n"
+        "return button returned of r\n" % default_btn
+    )
+    try:
+        ans = _osascript(script)
+    except Exception:
+        ans = ""
+    if ans:
+        cfg["english_output"] = "bilingual" if "对照" in ans else "zh"
+        save_config(cfg)
+
+
 def run_settings_menu() -> None:
     first_run_if_needed()
     while True:
         cfg = load_config()
         appendix_state = "开" if cfg.get("include_raw_appendix", True) else "关"
+        en_state = "中英对照" if cfg.get("english_output", "bilingual") == "bilingual" else "仅中文"
         script = f'''
-set opts to {{"查看当前设定", "选择修饰模型", "设置 API 金钥", "登录云端帐号", "编辑佛教词库", "附录：原始转录（目前：{appendix_state}）", "选择 Word 模板", "恢复默认模板", "完成"}}
+set opts to {{"查看当前设定", "选择修饰模型", "设置 API 金钥", "登录云端帐号", "编辑佛教词库", "附录：原始转录（目前：{appendix_state}）", "选择 Word 模板", "恢复默认模板", "英文输出（目前：{en_state}）", "完成"}}
 set picked to choose from list opts with prompt "语音转文字 · 设定" OK button name "确定" cancel button name "完成"
 if picked is false then return "完成"
 return item 1 of picked
@@ -268,6 +289,8 @@ return item 1 of picked
                 _offer_login_if_needed(picked)
         elif "附录" in choice:
             _toggle_raw_appendix()
+        elif "英文输出" in choice:
+            _toggle_english_output()
         elif "恢复默认模板" in choice:
             _reset_template()
         elif "Word 模板" in choice or "模板" in choice:

@@ -72,7 +72,7 @@ tell application "Finder"
     make new folder at desktop with properties {name:"语音转文字"}
   end if
   set root to folder "语音转文字" of desktop
-  repeat with subName in {"中文", "藏文", "完成"}
+  repeat with subName in {"中文", "英文", "藏文", "完成"}
     if not (exists folder subName of root) then
       make new folder at root with properties {name:(subName as string)}
     end if

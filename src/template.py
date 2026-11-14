@@ -287,6 +287,55 @@ def add_body_paragraph(
     return p
 
 
+
+def add_bilingual_table(doc, pairs: list[dict]) -> None:
+    from docx.oxml.ns import qn
+    from lxml import etree
+    from docx.shared import Emu
+
+    if not pairs:
+        return
+    _add_heading(doc, "正文（中英对照）")
+    table = doc.add_table(rows=1, cols=2)
+    try:
+        table.style = "Table Grid"
+    except Exception:
+        pass
+    # Content width of the A5 template is about 3.94 inches.
+    widths = (Emu(1800000), Emu(1800000))
+    for cell, label, font in (
+        (table.rows[0].cells[0], "English", "Times New Roman"),
+        (table.rows[0].cells[1], "中文", HEADING_FONT),
+    ):
+        cell.text = ""
+        para = cell.paragraphs[0]
+        _align(para, "center")
+        _set_run_font(para.add_run(label), font, 10.5, bold=True)
+    for pair in pairs:
+        row = table.add_row()
+        for cell, text, font in (
+            (row.cells[0], str(pair.get("en") or "").strip(), "Times New Roman"),
+            (row.cells[1], str(pair.get("zh") or "").strip(), BODY_FONT),
+        ):
+            cell.text = ""
+            para = cell.paragraphs[0]
+            _align(para, "both")
+            _spacing(para, line=260, after=40)
+            if text:
+                _set_run_font(para.add_run(text), font, 10)
+    tbl = table._tbl
+    tblPr = tbl.find(qn("w:tblPr"))
+    if tblPr is None:
+        tblPr = etree.SubElement(tbl, qn("w:tblPr"))
+    grid = tbl.find(qn("w:tblGrid"))
+    if grid is not None:
+        for el, w in zip(list(grid), widths):
+            el.set(qn("w:w"), str(int(w.twips if hasattr(w, "twips") else w // 635)))
+    for row in table.rows:
+        for cell, w in zip(row.cells, widths):
+            cell.width = w
+
+
 def write_from_template(
     dest: Path,
     *,
@@ -303,6 +352,8 @@ def write_from_template(
     highlight_phrases: list[str] | None = None,
     speaker: str = "",
     template_path: Optional[Path] = None,
+    title_zh: str = "",
+    bilingual_pairs: list[dict] | None = None,
 ) -> Path:
     from docx import Document
     from docx.shared import RGBColor
@@ -319,6 +370,12 @@ def write_from_template(
     shown = display_title(title)
     who = speaker or infer_speaker(shown, sections, source_name)
     _add_title_block(doc, shown, who, source_name, duration_label, polish_label, when)
+    has_cjk = any("一" <= ch <= "鿿" for ch in (title_zh or ""))
+    if title_zh and has_cjk and title_zh not in shown and title_zh not in (title or ""):
+        p = _add_styled_paragraph(doc, STYLE_PLAIN)
+        _align(p, "center")
+        _spacing(p, line=360, after=80)
+        _set_run_font(p.add_run(title_zh), TITLE_FONT, 16, bold=True)
 
     if note:
         p = _add_styled_paragraph(doc, STYLE_NORMAL)
@@ -337,15 +394,19 @@ def write_from_template(
         add_body_paragraph(doc, summary, lang, indent=True)
 
     wrote_body = False
-    for sec in sections:
-        heading = (sec.get("heading") or "").strip()
-        if heading:
-            _add_heading(doc, heading)
-        for para in sec.get("paragraphs") or []:
-            if not str(para).strip():
-                continue
-            add_body_paragraph(doc, str(para), lang, highlight_phrases)
-            wrote_body = True
+    if bilingual_pairs and any(str(p.get("zh") or "").strip() for p in bilingual_pairs):
+        add_bilingual_table(doc, bilingual_pairs)
+        wrote_body = True
+    else:
+        for sec in sections:
+            heading = (sec.get("heading") or "").strip()
+            if heading:
+                _add_heading(doc, heading)
+            for para in sec.get("paragraphs") or []:
+                if not str(para).strip():
+                    continue
+                add_body_paragraph(doc, str(para), lang, highlight_phrases)
+                wrote_body = True
 
     if not wrote_body:
         add_body_paragraph(doc, "（未识别到语音内容）", "zh", indent=False)

@@ -45,7 +45,7 @@ from paths import (
     raw_dir,
     work_dir,
 )
-from polish import make_summary, polish_text
+from polish import make_summary, polish_text, translate_english
 from template import write_from_template
 
 TZ = ZoneInfo("America/Los_Angeles")
@@ -244,14 +244,32 @@ def detect_lang(src: Path, requested: str) -> str:
     lang = (requested or "auto").lower()
     if lang in ("zh-cn", "zh_cn", "cn", "chinese", "cmn"):
         return "zh"
+    if lang in ("en", "eng", "english"):
+        return "en"
     if lang in ("tibetan", "tib", "bo-cn"):
         return "bo"
     if lang == "auto":
         hay = str(src).lower() + " " + src.name
         if "藏" in src.name or "藏" in str(src) or "tibet" in hay or hay.endswith(".bo"):
             return "bo"
-        return "zh"
+        if "英文" in src.name or "英语" in src.name or "english" in hay or "_en." in hay or "-en." in hay or hay.endswith(".en"):
+            return "en"
+        return "auto"
     return lang
+
+
+def infer_script(text: str) -> str:
+    """Guess zh / en / bo from already recognized text."""
+    if not text or not text.strip():
+        return "zh"
+    bo = sum(1 for ch in text if "\u0f00" <= ch <= "\u0fff")
+    cjk = sum(1 for ch in text if "\u4e00" <= ch <= "\u9fff")
+    latin = sum(1 for ch in text if ch.isascii() and ch.isalpha())
+    if bo > 20 and bo >= cjk and bo * 2 >= latin:
+        return "bo"
+    if latin >= 40 and latin > cjk * 2:
+        return "en"
+    return "zh"
 
 
 def job_id_for(src: Path) -> str:
@@ -376,6 +394,8 @@ def write_docx(
     proofread_note: str = "",
     highlight_phrases: list[str] | None = None,
     speaker: str = "",
+    title_zh: str = "",
+    bilingual_pairs: list[dict] | None = None,
 ) -> Path:
     if not overwrite:
         dest = unique_path(dest)
@@ -395,6 +415,8 @@ def write_docx(
             proofread_note=proofread_note,
             highlight_phrases=highlight_phrases,
             speaker=speaker,
+            title_zh=title_zh,
+            bilingual_pairs=bilingual_pairs,
         )
     except Exception as exc:
         log(f"TEMPLATE fallback: {exc}")
@@ -637,18 +659,47 @@ def transcribe_file(
         )
     proof_note = format_proofread_note(proof_stats) if proof_stats else ""
 
+    if lang == "auto":
+        lang = infer_script("\n".join(working))
+        log(f"LANG inferred {lang}")
+
     sections = []
     notes = []
     provider_used = "none"
-    for i, text in enumerate(working):
-        if not text.strip():
-            continue
-        result = polish_text(text, provider=polish)
-        provider_used = result["provider_used"]
-        if result.get("note"):
-            notes.append(result["note"])
-        sections.append({"heading": result.get("heading") or "", "paragraphs": result["paragraphs"]})
-        log(f"POLISH chunk {i+1}/{len(texts)} via {provider_used}")
+    bilingual_pairs: list[dict] | None = None
+    title_zh = ""
+    if lang == "en":
+        english_paras = [t.strip() for t in working if str(t).strip()]
+        if polish == "none":
+            sections = [{"heading": "", "paragraphs": english_paras}]
+            provider_used = "none"
+            notes.append("未修饰，未翻译（可用设定或去掉 --no-polish 来翻译成中文）")
+            log("ENGLISH --no-polish, skip translation")
+        else:
+            tr = translate_english(english_paras, provider=polish, title=stem)
+            provider_used = tr.get("provider_used") or "none"
+            if tr.get("note"):
+                notes.append(tr["note"])
+            bilingual_pairs = tr.get("pairs") or []
+            title_zh = tr.get("title_zh") or ""
+            zh_paras = [p.get("zh") or "" for p in bilingual_pairs if p.get("zh")]
+            heading_zh = tr.get("heading_zh") or ""
+            sections = [{"heading": heading_zh, "paragraphs": zh_paras or english_paras}]
+            if not any(p.get("zh") for p in bilingual_pairs):
+                bilingual_pairs = None
+            if (cfg.get("english_output") or "bilingual") != "bilingual":
+                bilingual_pairs = None
+            log(f"TRANSLATE en->zh via {provider_used} pairs={len(tr.get('pairs') or [])}")
+    else:
+        for i, text in enumerate(working):
+            if not text.strip():
+                continue
+            result = polish_text(text, provider=polish)
+            provider_used = result["provider_used"]
+            if result.get("note"):
+                notes.append(result["note"])
+            sections.append({"heading": result.get("heading") or "", "paragraphs": result["paragraphs"]})
+            log(f"POLISH chunk {i+1}/{len(texts)} via {provider_used}")
 
     summary = ""
     all_paras = [p for s in sections for p in s.get("paragraphs") or []]
@@ -680,6 +731,8 @@ def transcribe_file(
         raw_appendix=texts if include_raw else None,
         proofread_note=proof_note,
         highlight_phrases=highlight_phrases,
+        title_zh=title_zh,
+        bilingual_pairs=bilingual_pairs,
     )
     elapsed = time.perf_counter() - t0
     rtf_x = (duration / elapsed) if elapsed > 0 else 0.0
@@ -754,7 +807,7 @@ def _transcribe_arg(
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="transcribe", description="把音频转成 Word 文档，默认保存到下载文件夹。")
     parser.add_argument("files", nargs="*", help="音频/视频文件，或 YouTube 等网址（可多个）")
-    parser.add_argument("--lang", default="auto", help="zh / bo / auto")
+    parser.add_argument("--lang", default="auto", help="zh / en / bo / auto")
     parser.add_argument("--out", default=str(default_out_dir()), help="输出目录")
     parser.add_argument("--polish", default=None, help="local / claude / gpt / gemini / none（默认用设定）")
     parser.add_argument("--settings", action="store_true", help="打开设定")

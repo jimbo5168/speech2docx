@@ -1,6 +1,7 @@
 # 佛教词库（语音转文字）
 # 一行一个词。以 # 开头的是注释，不会送进模型。
 # 也可写成「错误写法 -> 正确写法」，只使用箭头右边的正确词。
+# 英译对照写成「bodhicitta = 菩提心」，英文转中文时会用到。
 # 用设定里的「编辑佛教词库」即可增删，保存后下次转写生效。
 #
 # 用途：1）提示本地千问 ASR / 藏文 Whisper；2）给修饰模型当佛教编辑参考。
@@ -1240,3 +1241,62 @@ Mandala
 自性身
 智慧身
 四身五智
+
+# --- English equivalents（英文转中文）---
+bodhicitta = 菩提心
+bodhisattva = 菩萨
+Buddha = 佛陀
+Dharma = 佛法
+Sangha = 僧众
+samsara = 轮回
+nirvana = 涅槃
+karma = 业
+emptiness = 空性
+guru yoga = 上师瑜伽
+guru = 上师
+lama = 喇嘛
+rinpoche = 仁波切
+khenpo = 堪布
+ngondro = 前行
+preliminary practices = 前行
+shamatha = 止
+vipashyana = 观
+tathagata = 如来
+sentient beings = 众生
+refuge = 皈依
+dedication = 回向
+Vajrayana = 密乘
+Mahayana = 大乘
+mandala = 坛城
+mantra = 咒
+sadhana = 仪轨
+empowerment = 灌顶
+yidam = 本尊
+dakini = 空行母
+Dharmakaya = 法身
+Sambhogakaya = 报身
+Nirmanakaya = 化身
+Four Noble Truths = 四谛
+Noble Eightfold Path = 八正道
+impermanence = 无常
+renunciation = 出离心
+dependent origination = 缘起
+prajna = 般若
+paramita = 波罗蜜
+abhidharma = 阿毗达磨
+sutra = 经
+tantra = 续部
+Vinaya = 律
+bhumi = 地
+samadhi = 三摩地
+mindfulness = 正念
+compassion = 慈悲
+wisdom = 智慧
+liberation = 解脱
+enlightenment = 证悟
+awakening = 觉醒
+bardo = 中阴
+stupa = 佛塔
+dharma nature = 法性
+two truths = 二谛
+middle way = 中观
