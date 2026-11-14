@@ -1,8 +1,8 @@
 # 产品需求文档 Product Requirements Document
 
-**产品名称：** 语音转文字 / Speech2Docx  
+**产品名称：** 为我闻思（Wei Wo Wen Si） / speech2docx  
 **平台：** macOS（Apple Silicon）  
-**版本：** 1.0  
+**版本：** 0.4.0  
 **许可：** MIT
 
 ## 1. 背景与目标
@@ -62,7 +62,7 @@ Success looks like: a user drops a two-hour lecture on the app icon and later fi
 
 ### 3.4 应用与设定
 
-- `语音转文字.app` 打开一个本地窗口：可选择档案或文件夹、把文件拖进窗口或 Dock 图标、或贴上 YouTube 链接；队列显示进度，完成后可打开文档或在 Finder 中显示
+- `为我闻思.app` 打开一个本地窗口：可选择档案或文件夹、把文件拖进窗口或 Dock 图标、或贴上 YouTube 链接；队列显示进度，完成后可打开文档或在 Finder 中显示
 - 系统通知：开始、结束
 - 第一次使用预选本地千问，不弹出选择框；设定都在窗口的「设定」页
 - 设定项：选择模型、登录、填写金钥、编辑佛教词库、开关「附录：原始转录」（默认开）、选择或恢复 Word 模板、英文输出（中英对照 / 仅中文）、更改输出位置

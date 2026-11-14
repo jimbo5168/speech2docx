@@ -1,5 +1,5 @@
 #!/bin/bash
-# Install Speech2Docx / 语音转文字 for the current user.
+# Install 为我闻思 (Wei Wo Wen Si) / speech2docx for the current user.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")" && pwd)"
@@ -65,6 +65,7 @@ export ASR_HOME="${ASR_HOME}"
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:\$PATH"
 exec "${ASR_HOME}/.venv/bin/python" "${ASR_HOME}/transcribe.py" "\$@"
 WRAP
+# gui-launch is rewritten after the .app is installed so it can use 为我闻思.
 cat > "$ASR_HOME/gui-launch" << WRAP
 #!/bin/bash
 export ASR_HOME="${ASR_HOME}"
@@ -106,12 +107,38 @@ $HF download tenzin/whisper-small-tibetan-ct2
 log "Building app…"
 APP_BUILT="$("$REPO_ROOT/scripts/build_app.sh" "$ASR_HOME/dist")"
 if mkdir -p /Applications && cp -R "$APP_BUILT" "/Applications/" 2>/dev/null; then
-  APP_PATH="/Applications/语音转文字.app"
+  APP_PATH="/Applications/为我闻思.app"
 else
   mkdir -p "$HOME/Applications"
   cp -R "$APP_BUILT" "$HOME/Applications/"
-  APP_PATH="$HOME/Applications/语音转文字.app"
+  APP_PATH="$HOME/Applications/为我闻思.app"
 fi
+# Replace the previous app name if it is still installed.
+rm -rf "/Applications/语音转文字.app" "$HOME/Applications/语音转文字.app"
+# Refresh Launch Services so Finder/Dock pick up the new name and icon.
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$APP_PATH" >/dev/null 2>&1 || true
+# Point the GUI launcher at the native engine inside the .app (not Python.app).
+"$VPY" - "$ASR_HOME" "$APP_PATH" "$VPY" << 'PY'
+from pathlib import Path
+import sys
+asr_home, app_path, vpy = sys.argv[1], sys.argv[2], sys.argv[3]
+gui_py = str(Path(asr_home) / "gui.py")
+engine = str(Path(app_path) / "Contents/MacOS/为我闻思")
+script = Path(asr_home) / "gui-launch"
+lines = [
+    "#!/bin/bash",
+    f"export ASR_HOME={asr_home!r}",
+    'export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:$PATH"',
+    f"ENGINE={engine!r}",
+    'if [[ -x "$ENGINE" ]]; then',
+    f'  exec "$ENGINE" {gui_py!r} "$@"',
+    "fi",
+    f"exec {vpy!r} {gui_py!r} \"$@\"",
+    "",
+]
+script.write_text("\n".join(lines))
+script.chmod(0o755)
+PY
 log "App installed at $APP_PATH"
 
 # launchd
@@ -125,36 +152,74 @@ launchctl bootout "gui/$uid/com.speech2docx.asr-watch" 2>/dev/null || true
 launchctl bootstrap "gui/$uid" "$PLIST"
 launchctl enable "gui/$uid/com.speech2docx.watch" 2>/dev/null || true
 
-# Dock
+# Dock: drop the old 语音转文字 tile and pin 为我闻思.
 if [[ "$ADD_DOCK" == "1" ]]; then
-  APP_URI="file://${APP_PATH}/"
-  python3 - "$APP_URI" << 'PY' || true
-import os, subprocess, sys
-uri = sys.argv[1]
-# Avoid adding a duplicate
-existing = subprocess.check_output(["defaults", "read", "com.apple.dock", "persistent-apps"], text=True, stderr=subprocess.DEVNULL)
-if "语音转文字.app" in existing or "org.speech2docx.app" in existing:
-    print("Dock already has 语音转文字")
-    sys.exit(0)
-entry = f'''
-<dict>
-  <key>tile-data</key>
-  <dict>
-    <key>file-data</key>
-    <dict>
-      <key>_CFURLString</key>
-      <string>{uri}</string>
-      <key>_CFURLStringType</key>
-      <integer>15</integer>
-    </dict>
-  </dict>
-  <key>tile-type</key>
-  <string>file-tile</string>
-</dict>
-'''
-subprocess.run(["defaults", "write", "com.apple.dock", "persistent-apps", "-array-add", entry], check=True)
-subprocess.run(["killall", "Dock"], check=False)
-print("Added to Dock")
+  python3 - "$APP_PATH" << 'PY' || true
+import subprocess, sys, tempfile, plistlib
+from pathlib import Path
+from urllib.parse import unquote, urlparse
+
+app_path = str(Path(sys.argv[1]).resolve())
+app_uri = Path(app_path).as_uri() + "/"
+legacy_names = ("语音转文字.app", "为我闻思.app")
+bundle_id = "org.speech2docx.app"
+
+def tile_ref(tile):
+    data = (tile or {}).get("tile-data") or {}
+    file_data = data.get("file-data") or {}
+    url = file_data.get("_CFURLString") or data.get("file-label") or ""
+    ident = data.get("bundle-identifier") or ""
+    try:
+        path = unquote(urlparse(url).path) if "://" in str(url) else str(url)
+    except Exception:
+        path = str(url)
+    return path, ident, str(url)
+
+exported = Path(tempfile.mkstemp(suffix=".plist")[1])
+try:
+    subprocess.run(["defaults", "export", "com.apple.dock", str(exported)], check=True)
+    with exported.open("rb") as fh:
+        dock = plistlib.load(fh)
+    apps = list(dock.get("persistent-apps") or [])
+    kept = []
+    changed = False
+    already = False
+    for tile in apps:
+        path, ident, url = tile_ref(tile)
+        is_ours = ident == bundle_id or any(name in path or name in unquote(url) for name in legacy_names)
+        if is_ours:
+            if path.rstrip("/") == app_path:
+                already = True
+                kept.append(tile)
+            else:
+                changed = True
+            continue
+        kept.append(tile)
+    if not already:
+        kept.append({
+            "tile-type": "file-tile",
+            "tile-data": {
+                "file-data": {
+                    "_CFURLString": app_uri,
+                    "_CFURLStringType": 15,
+                }
+            },
+        })
+        changed = True
+    if changed:
+        dock["persistent-apps"] = kept
+        with exported.open("wb") as fh:
+            plistlib.dump(dock, fh)
+        subprocess.run(["defaults", "import", "com.apple.dock", str(exported)], check=True)
+        subprocess.run(["killall", "Dock"], check=False)
+        print("Updated Dock for 为我闻思")
+    else:
+        print("Dock already has 为我闻思")
+finally:
+    try:
+        exported.unlink()
+    except OSError:
+        pass
 PY
 fi
 
@@ -165,4 +230,4 @@ case ":$PATH:" in
 esac
 
 log "Install complete."
-log "Usage: drop audio on the 语音转文字 app or Desktop folder, or run: transcribe FILE.mp3"
+log "Usage: open 为我闻思, or drop audio on the app / Desktop/语音转文字 folder, or run: transcribe FILE.mp3"

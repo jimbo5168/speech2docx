@@ -1,10 +1,12 @@
-# 语音转文字 / Speech2Docx
+# 为我闻思（Wei Wo Wen Si） / speech2docx
 
 本地语音转文字工具（macOS，Apple Silicon）。把 MP3 / M4A / WAV 等音频拖到应用图标或桌面文件夹，即会在「下载」文件夹生成排好版的 Word 文档（`.docx`）。
 
 音频始终只在本机识别。可选的文字修饰可以使用本地大模型（LM Studio），或你已登录的 Claude / ChatGPT / Gemini 订阅，也可以改用 API 金钥。
 
 ---
+
+**Wei Wo Wen Si** (为我闻思; traditional 為我聞思) is published in this repository as **speech2docx**.
 
 Local speech-to-text for macOS on Apple Silicon. Drop an MP3, M4A, WAV, or a video (MP4, MOV, MKV, WEBM, …) onto the app icon or a Desktop folder and a formatted Word document appears in Downloads. Video files are converted by extracting the soundtrack first. If subtitles are embedded, sit in a sidecar file, or come from a YouTube URL, they are aligned with the ASR text for proofreading; unresolved disagreements are highlighted in yellow.
 
@@ -35,8 +37,8 @@ Audio is transcribed only on the machine. The first-run chooser preselects Local
 ## 安装 Install
 
 ```bash
-git clone <this-repo> Speech2Docx
-cd Speech2Docx
+git clone <this-repo> speech2docx
+cd speech2docx
 ./install.sh
 ```
 
@@ -44,13 +46,13 @@ cd Speech2Docx
 
 1. 在 `~/ASR` 创建虚拟环境并安装依赖
 2. 下载两个识别模型（已缓存则跳过）
-3. 生成「语音转文字.app」，放到 `/Applications`（若无权限则放到 `~/Applications`），并加到 Dock
+3. 生成「为我闻思.app」，放到 `/Applications`（若无权限则放到 `~/Applications`），并加到 Dock
 4. 安装登录时自动启动的文件夹监视（launchd）
 5. 把 `transcribe` 链到 `~/.local/bin`
 
 ## 用法 Usage
 
-点 Dock 或「应用程序」里的「语音转文字」，就会打开应用窗口。第一次使用默认已选「本地千问」，可在窗口的「设定」页随时更改。
+点 Dock 或「应用程序」里的「为我闻思」，就会打开应用窗口。第一次使用默认已选「本地千问」，可在窗口的「设定」页随时更改。
 
 把音频或视频拖进来，或选择档案、文件夹，或贴上 YouTube 链接，转好的 Word 会放在输出位置（默认为「下载」文件夹）。
 
@@ -58,7 +60,7 @@ Click the Dock or Applications icon to open the window. You can drop files onto 
 
 ### 使用方法 How to use
 
-1. 打开「语音转文字」
+1. 打开「为我闻思」
 2. 选择语言：中文、英文→中文，或藏文
 3. 用下面任一方式加入内容：
    - 把档案拖到窗口里，或点「选择档案…」
@@ -78,11 +80,11 @@ Click the Dock or Applications icon to open the window. You can drop files onto 
 
 ### 应用图标 App icon
 
-也可以把档案直接拖到 Dock 上的「语音转文字」图标，文件会加入同一窗口的队列。
+也可以把档案直接拖到 Dock 上的「为我闻思」图标，文件会加入同一窗口的队列。
 
 ### 桌面文件夹 Drop folders
 
-`~/Desktop/语音转文字/`
+`~/Desktop/语音转文字/`（文件夹名保持不变，与应用名不同）
 
 - `中文`：用千问 ASR
 - `藏文`：用藏文 Whisper
@@ -130,7 +132,7 @@ transcribe --settings
   work/                分片缓存，可续传
   transcribe           命令行入口
 
-Speech2Docx/           本仓库
+speech2docx/           本仓库
   src/                 源代码
   scripts/             打包应用、图标
   launchd/             监视器模板

@@ -1,10 +1,10 @@
 #!/bin/bash
-# Build 语音转文字.app into a destination directory.
+# Build 为我闻思.app into a destination directory.
 set -euo pipefail
 ASR_HOME="${ASR_HOME:-$HOME/ASR}"
 DEST_DIR="${1:-$ASR_HOME/dist}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP_NAME="语音转文字.app"
+APP_NAME="为我闻思.app"
 WORKDIR="$(mktemp -d)"
 SCRIPT="$WORKDIR/droplet.applescript"
 sed "s#__ASR_HOME__#${ASR_HOME}#g" "$REPO_ROOT/scripts/droplet.applescript.template" > "$SCRIPT"
@@ -24,10 +24,10 @@ fi
 INFO="$APP/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier org.speech2docx.app" "$INFO" 2>/dev/null \
   || /usr/libexec/PlistBuddy -c "Add :CFBundleIdentifier string org.speech2docx.app" "$INFO"
-/usr/libexec/PlistBuddy -c "Set :CFBundleName 语音转文字" "$INFO" 2>/dev/null \
-  || /usr/libexec/PlistBuddy -c "Add :CFBundleName string 语音转文字" "$INFO"
-/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 语音转文字" "$INFO" 2>/dev/null \
-  || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string 语音转文字" "$INFO"
+/usr/libexec/PlistBuddy -c "Set :CFBundleName 为我闻思" "$INFO" 2>/dev/null \
+  || /usr/libexec/PlistBuddy -c "Add :CFBundleName string 为我闻思" "$INFO"
+/usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 为我闻思" "$INFO" 2>/dev/null \
+  || /usr/libexec/PlistBuddy -c "Add :CFBundleDisplayName string 为我闻思" "$INFO"
 
 # Accept audio drops on the Dock icon
 /usr/libexec/PlistBuddy -c "Delete :CFBundleDocumentTypes" "$INFO" 2>/dev/null || true
@@ -60,5 +60,35 @@ for ext in mp4 mov mkv webm m4v avi mpeg mpg 3gp wmv flv ts mts; do
   /usr/libexec/PlistBuddy -c "Add :CFBundleDocumentTypes:1:CFBundleTypeExtensions:${idx} string ${ext}" "$INFO"
   idx=$((idx + 1))
 done
+
+# Version shown in Finder Get Info
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 0.4.0" "$INFO" 2>/dev/null \
+  || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 0.4.0" "$INFO"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion 0.4.0" "$INFO" 2>/dev/null \
+  || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string 0.4.0" "$INFO"
+
+# Native Python host so the menu bar and process name are 为我闻思, not Python.
+VPY="${ASR_HOME}/.venv/bin/python"
+if [[ ! -x "$VPY" ]]; then
+  echo "Need a virtualenv at $ASR_HOME/.venv before building the app." >&2
+  exit 1
+fi
+PY_INC="$("$VPY" -c "import sysconfig; print(sysconfig.get_path('include'))")"
+# Homebrew's Python.framework often lacks the top-level Current symlink, so
+# -framework Python fails; link the versioned dylib directly.
+PY_LIB="$("$VPY" -c "import sys, pathlib; print(pathlib.Path(sys.base_prefix).resolve() / 'Python')")"
+if [[ ! -f "$PY_LIB" ]]; then
+  echo "Cannot find the Python library at $PY_LIB" >&2
+  exit 1
+fi
+clang -o "$APP/Contents/MacOS/为我闻思" \
+  "$REPO_ROOT/scripts/wensi_launcher.c" \
+  -I"$PY_INC" \
+  "$PY_LIB"
+chmod +x "$APP/Contents/MacOS/为我闻思"
+# Binary name is 为我闻思 so the process name matches the menu bar.
+
+# Ad-hoc sign so Launch Services accepts the copied/compiled binaries.
+codesign --force --deep --sign - "$APP" >/dev/null 2>&1 || true
 
 echo "$APP"

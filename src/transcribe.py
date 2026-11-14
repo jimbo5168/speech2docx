@@ -611,7 +611,7 @@ def transcribe_file(
 
     duration = audio_duration(media_src) or media_duration(src)
     if do_notify:
-        notify("语音转文字", f"开始转写「{source_name}」（约 {int(duration//60)} 分钟）")
+        notify("为我闻思", f"开始转写「{source_name}」（约 {int(duration//60)} 分钟）")
 
     log(f"START {src.name} lang={lang} duration={duration:.1f}s")
     emit_progress(on_progress, "transcribe", 5, "开始识别…")
@@ -761,7 +761,7 @@ def transcribe_file(
     log(f"DONE {src.name} -> {docx_path.name} audio={duration:.1f}s elapsed={elapsed:.1f}s ({rtf_x:.1f}x)")
     emit_progress(on_progress, "done", 100, "完成")
     if do_notify:
-        notify("语音转文字", f"已完成「{docx_path.name}」，保存在下载文件夹")
+        notify("为我闻思", f"已完成「{docx_path.name}」，保存在下载文件夹")
     if open_docx:
         subprocess.run(["/usr/bin/open", str(docx_path)], check=False)
     return {

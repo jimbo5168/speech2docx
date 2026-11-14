@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Desktop window for 语音转文字. Click the Dock icon to open it."""
+"""Desktop window for 为我闻思. Click the Dock icon to open it."""
 
 from __future__ import annotations
 
@@ -37,6 +37,46 @@ from transcribe import _transcribe_arg
 
 IPC_HOST = "127.0.0.1"
 IPC_PORT = 17834
+APP_NAME = "为我闻思"
+
+
+def _adopt_app_identity() -> None:
+    """Make the menu bar and process name 为我闻思, even if Cocoa started as Python."""
+    try:
+        from Foundation import NSBundle, NSProcessInfo
+
+        info = NSBundle.mainBundle().infoDictionary()
+        if info is not None:
+            info["CFBundleName"] = APP_NAME
+            info["CFBundleDisplayName"] = APP_NAME
+        NSProcessInfo.processInfo().setProcessName_(APP_NAME)
+    except Exception:
+        pass
+
+
+def _running_inside_app() -> bool:
+    parts = " ".join([sys.executable or "", *sys.argv])
+    return "为我闻思.app" in parts or "语音转文字.app" in parts
+
+
+def _apply_app_icon() -> None:
+    try:
+        from AppKit import NSApplication, NSImage
+
+        candidates = [
+            Path(sys.executable).resolve().parents[1] / "Resources" / "AppIcon.icns",
+            Path("/Applications/为我闻思.app/Contents/Resources/AppIcon.icns"),
+            Path.home() / "Applications/为我闻思.app/Contents/Resources/AppIcon.icns",
+        ]
+        for path in candidates:
+            if path.is_file():
+                img = NSImage.alloc().initWithContentsOfFile_(str(path))
+                if img:
+                    NSApplication.sharedApplication().setApplicationIconImage_(img)
+                    return
+    except Exception:
+        pass
+
 
 LANG_LABELS = {
     "zh": "中文",
@@ -504,14 +544,13 @@ end tell
 
 
 def _hide_extra_dock_icon() -> None:
-    """Keep the official .app icon in the Dock; hide a second Python icon."""
+    """If we are not running from the official .app, hide a second Python Dock icon."""
     try:
         from AppKit import NSApplication, NSApplicationActivationPolicyAccessory
 
-        app = NSApplication.sharedApplication()
-        exe = sys.argv[0] if sys.argv else ""
-        if "语音转文字.app" in exe:
+        if _running_inside_app():
             return
+        app = NSApplication.sharedApplication()
         app.setActivationPolicy_(NSApplicationActivationPolicyAccessory)
     except Exception:
         pass
@@ -661,6 +700,7 @@ def main(argv: Optional[list[str]] = None) -> int:
             items.append({"kind": "url", "source": url, "name": "YouTube 视频"})
         STATE.add_jobs(items)
 
+    _adopt_app_identity()
     import webview
 
     api = JsApi()
@@ -668,7 +708,7 @@ def main(argv: Optional[list[str]] = None) -> int:
     if not index.is_file():
         raise SystemExit(f"找不到界面文件：{index}")
     window = webview.create_window(
-        "语音转文字",
+        APP_NAME,
         url=index.as_uri(),
         js_api=api,
         width=880,
@@ -679,6 +719,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     STATE.window = window
     window.events.loaded += lambda: _bind_drop_target(window)
     def on_shown():
+        _adopt_app_identity()
+        _apply_app_icon()
         _focus_window()
         _hide_extra_dock_icon()
 
