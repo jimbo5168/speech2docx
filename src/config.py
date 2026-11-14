@@ -27,6 +27,7 @@ DEFAULTS: dict[str, Any] = {
     "chunk_seconds": 480,
     "overlap_seconds": 4,
     "include_raw_appendix": True,
+    "template_path": "",
 }
 
 PROVIDERS = ("local", "claude", "gpt", "gemini")

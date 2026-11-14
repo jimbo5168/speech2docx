@@ -8,7 +8,7 @@
 
 Local speech-to-text for macOS on Apple Silicon. Drop an MP3, M4A, WAV, or a video (MP4, MOV, MKV, WEBM, …) onto the app icon or a Desktop folder and a formatted Word document appears in Downloads. Video files are converted by extracting the soundtrack first. If subtitles are embedded, sit in a sidecar file, or come from a YouTube URL, they are aligned with the ASR text for proofreading; unresolved disagreements are highlighted in yellow.
 
-Audio is transcribed only on the machine. The first-run chooser preselects Local (LM Studio Qwen) so you can check accuracy before switching to a cloud model. By default the Word file also ends with an appendix, 附录：原始转录, containing the unpolished ASR text (turn this off in Settings). Optional polishing can use Local, or a signed-in Claude / ChatGPT / Gemini subscription, or an API key.
+Audio is transcribed only on the machine. The first-run chooser preselects Local (LM Studio Qwen) so you can check accuracy before switching to a cloud model. By default the Word file also ends with an appendix, 附录：原始转录, containing the unpolished ASR text (turn this off in Settings). Documents use a bundled typography template (A5, header banner, footer page numbers, 华文行楷 titles and 宋体 body). Choose your own template in Settings if you like. Optional polishing can use Local, or a signed-in Claude / ChatGPT / Gemini subscription, or an API key.
 
 ## 功能 Features
 
@@ -20,6 +20,7 @@ Audio is transcribed only on the machine. The first-run chooser preselects Local
 - **佛教词库**：可编辑的专有名词表，同时用于识别提示和文字修饰
 - **自动修饰**：修正同音错字、去掉「啊 / 呃 / 嗯」、分段和标题；可加一段标明的「摘要」
 - **只输出 DOCX**：默认在文档末尾附「附录：原始转录」（未修饰原文，便于对照准确度）；可在设定中关闭。识别初稿同时保存在本机日志目录
+- **固定版式**：输出套用内置 Word 模板（约 A5、页眉图案、页脚页码）。标题用华文行楷，讲者与「听打稿」用华文楷体，正文宋体，小节标题黑体。页眉左侧的册名已去掉。可在设定中改用自己的模板，或恢复默认版式
 - **三种用法**：Dock 应用（拖文件）、桌面文件夹、命令行 `transcribe`
 - **默认本机**：第一次使用预选「本地（LM Studio 千问）」，识别和修饰都在本机完成，方便先测准确度
 
@@ -108,6 +109,7 @@ Speech2Docx/           本仓库
   src/                 源代码
   scripts/             打包应用、图标
   launchd/             监视器模板
+  templates/default.docx  版式模板（无讲课正文）
   install.sh
 ```
 

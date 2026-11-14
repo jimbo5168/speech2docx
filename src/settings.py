@@ -146,6 +146,7 @@ def show_current() -> str:
         f"认证方式：{'登录' if mode == 'login' else 'API 金钥' if p != 'local' else '本地'}",
         f"模型编号（可在设定文件里改）：{models.get(p, '')}",
         f"附录：原始转录：{'开' if cfg.get('include_raw_appendix', True) else '关'}",
+        f"Word 模板：{cfg.get('template_path') or '默认版式'}",
     ]
     for name, info in st.items():
         inst = "已安装" if info.get("installed") else "未安装"
@@ -178,13 +179,44 @@ def _toggle_raw_appendix() -> None:
         save_config(cfg)
 
 
+
+def _choose_template() -> None:
+    script = """
+set theFile to choose file with prompt "选择以后输出要用的 Word 模板（.docx）" of type {"org.openxmlformats.wordprocessingml.document"}
+POSIX path of theFile
+"""
+    try:
+        raw = _osascript(script)
+    except Exception:
+        return
+    path = (raw or "").strip()
+    if not path:
+        return
+    from pathlib import Path
+    chosen = Path(path).expanduser()
+    if not chosen.is_file():
+        _osascript('display dialog "找不到所选文件。" buttons {"好"} default button "好" with title "语音转文字"')
+        return
+    cfg = load_config()
+    cfg["template_path"] = str(chosen)
+    save_config(cfg)
+    _osascript(f'display dialog "已改用模板：{chosen.name}" buttons {{"好"}} default button "好" with title "语音转文字"')
+
+
+def _reset_template() -> None:
+    cfg = load_config()
+    cfg["template_path"] = ""
+    save_config(cfg)
+    _osascript('display dialog "已恢复为内置默认版式。" buttons {"好"} default button "好" with title "语音转文字"')
+
+
 def run_settings_menu() -> None:
     first_run_if_needed()
     while True:
         cfg = load_config()
         appendix_state = "开" if cfg.get("include_raw_appendix", True) else "关"
         script = f'''
-set opts to {{"查看当前设定", "选择修饰模型", "设置 API 金钥", "登录云端帐号", "编辑佛教词库", "附录：原始转录（目前：{appendix_state}）", "完成"}}
+set opts to {{"查看当前设定", "选择修饰模型", "设置 API 金钥", "登录云端帐号", "编辑佛教词库", "附录：原始转录（目前：{appendix_state}）", "选择 Word 模板", "恢复默认模板", "完成"}}
 set picked to choose from list opts with prompt "语音转文字 · 设定" OK button name "确定" cancel button name "完成"
 if picked is false then return "完成"
 return item 1 of picked
@@ -236,5 +268,9 @@ return item 1 of picked
                 _offer_login_if_needed(picked)
         elif "附录" in choice:
             _toggle_raw_appendix()
+        elif "恢复默认模板" in choice:
+            _reset_template()
+        elif "Word 模板" in choice or "模板" in choice:
+            _choose_template()
         elif "词库" in choice:
             open_glossary()

@@ -46,6 +46,7 @@ from paths import (
     work_dir,
 )
 from polish import make_summary, polish_text
+from template import write_from_template
 
 TZ = ZoneInfo("America/Los_Angeles")
 LOCK_PATH = logs_dir() / "transcribe.lock"
@@ -359,7 +360,62 @@ def add_body_paragraph(doc, text: str, lang: str, highlight_phrases: list[str] |
     return p
 
 
+
 def write_docx(
+    dest: Path,
+    title: str,
+    source_name: str,
+    sections: list[dict],
+    summary: str,
+    note: str,
+    lang: str,
+    duration: float,
+    polish_label: str,
+    raw_appendix: str | list[str] | None = None,
+    overwrite: bool = False,
+    proofread_note: str = "",
+    highlight_phrases: list[str] | None = None,
+    speaker: str = "",
+) -> Path:
+    if not overwrite:
+        dest = unique_path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        return write_from_template(
+            dest,
+            title=title,
+            source_name=source_name,
+            sections=sections,
+            summary=summary,
+            note=note,
+            lang=lang,
+            duration_label=format_duration(duration),
+            polish_label=polish_label,
+            raw_appendix=raw_appendix,
+            proofread_note=proofread_note,
+            highlight_phrases=highlight_phrases,
+            speaker=speaker,
+        )
+    except Exception as exc:
+        log(f"TEMPLATE fallback: {exc}")
+        return _write_docx_plain(
+            dest,
+            title,
+            source_name,
+            sections,
+            summary,
+            note,
+            lang,
+            duration,
+            polish_label,
+            raw_appendix=raw_appendix,
+            overwrite=True,
+            proofread_note=proofread_note,
+            highlight_phrases=highlight_phrases,
+        )
+
+
+def _write_docx_plain(
     dest: Path,
     title: str,
     source_name: str,

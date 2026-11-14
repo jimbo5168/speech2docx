@@ -48,6 +48,13 @@ if [[ ! -f "$ASR_HOME/config.json" ]]; then
   cp -f "$REPO_ROOT/config.example.json" "$ASR_HOME/config.json"
 fi
 
+# Bundled Word template (layout + fonts only)
+mkdir -p "$ASR_HOME/templates"
+if [[ -f "$REPO_ROOT/templates/default.docx" ]]; then
+  cp -f "$REPO_ROOT/templates/default.docx" "$ASR_HOME/templates/default.docx"
+fi
+
+
 # CLI wrapper
 cat > "$ASR_HOME/transcribe" << WRAP
 #!/bin/bash
