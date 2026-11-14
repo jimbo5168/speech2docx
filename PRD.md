@@ -30,6 +30,7 @@ Success looks like: a user drops a two-hour lecture on the app icon and later fi
 
 - 支持常见音频：mp3、m4a、wav、aac、flac、ogg 等（经 ffmpeg 转成 16 kHz 单声道）
 - 支持常见视频：mp4、mov、mkv、webm、m4v、avi 等；先抽出音轨再识别。可通过 Dock 应用、桌面文件夹或命令行提交
+- 字幕校对：使用视频内嵌字幕、同名 sidecar（.srt / .vtt / .ass），或 `transcribe <YouTube URL>`（yt-dlp 下载音轨与字幕；官方字幕优先，自动字幕标为较低可信度）。按时间对齐后，优先采用可信字幕并结合佛教词库修正；无法判定的分歧在 Word 中以黄色标出，并在「校对说明」中写明来源与修正数量
 - 中文（及千问 ASR 支持的其他语言）默认使用 Qwen3-ASR 1.7B MLX
 - 文件名或路径含「藏」，或用户指定 `--lang bo` 时，使用藏文 Whisper
 - 可处理 2 小时以上音频：按约 8 分钟分片、少量重叠、顺序识别以控制内存，中断后可续传

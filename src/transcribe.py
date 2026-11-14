@@ -27,6 +27,14 @@ from config import load_config
 from glossary import as_hotwords, as_prompt_block, ensure_glossary
 from notify import notify
 from media import MEDIA_EXTS, extract_audio, is_video, media_duration
+from subtitles import (
+    download_url,
+    find_subtitles,
+    format_proofread_note,
+    is_media_url,
+    proofread_chunks,
+    SubtitleTrack,
+)
 from paths import (
     FFMPEG,
     FFPROBE,
@@ -295,6 +303,62 @@ def format_duration(seconds: float) -> str:
     return f"{sec} 秒"
 
 
+
+def _highlight_spans(text: str, phrases: list[str]) -> list[tuple[str, bool]]:
+    """Split text into (fragment, highlighted) runs."""
+    if not text or not phrases:
+        return [(text, False)]
+    marks = [False] * len(text)
+    for ph in sorted({p for p in phrases if p}, key=len, reverse=True):
+        start = 0
+        while True:
+            i = text.find(ph, start)
+            if i < 0:
+                break
+            for k in range(i, i + len(ph)):
+                marks[k] = True
+            start = i + max(len(ph), 1)
+    runs: list[tuple[str, bool]] = []
+    buf = []
+    flag = marks[0]
+    for ch, hl in zip(text, marks):
+        if hl != flag and buf:
+            runs.append(("".join(buf), flag))
+            buf = [ch]
+            flag = hl
+        else:
+            buf.append(ch)
+    if buf:
+        runs.append(("".join(buf), flag))
+    return runs
+
+
+def add_body_paragraph(doc, text: str, lang: str, highlight_phrases: list[str] | None = None, size: int = 12, indent: bool = True):
+    from docx.shared import Cm, Pt, RGBColor
+    p = doc.add_paragraph()
+    text = str(text).strip()
+    for frag, hl in _highlight_spans(text, highlight_phrases or []):
+        r = p.add_run(frag)
+        set_run_font(r, lang, size)
+        if hl:
+            r.font.highlight_color = 7  # wdYellow
+            try:
+                r.font.highlight_color = 7
+            except Exception:
+                pass
+            # python-docx uses WD_COLOR_INDEX
+            try:
+                from docx.enum.text import WD_COLOR_INDEX
+                r.font.highlight_color = WD_COLOR_INDEX.YELLOW
+            except Exception:
+                pass
+    p.paragraph_format.space_after = Pt(10)
+    p.paragraph_format.line_spacing = 1.35
+    if indent:
+        p.paragraph_format.first_line_indent = Cm(0.74)
+    return p
+
+
 def write_docx(
     dest: Path,
     title: str,
@@ -307,6 +371,8 @@ def write_docx(
     polish_label: str,
     raw_appendix: str | list[str] | None = None,
     overwrite: bool = False,
+    proofread_note: str = "",
+    highlight_phrases: list[str] | None = None,
 ) -> Path:
     from docx import Document
     from docx.oxml.ns import qn
@@ -350,6 +416,18 @@ def write_docx(
         set_run_font(r, "zh", 10)
         r.font.color.rgb = RGBColor(0x88, 0x44, 0x00)
 
+    if proofread_note:
+        ph = doc.add_heading("校对说明", level=2)
+        for run in ph.runs:
+            set_run_font(run, "zh", 14)
+        for line in str(proofread_note).splitlines():
+            if not line.strip():
+                continue
+            p = doc.add_paragraph()
+            r = p.add_run(line.strip())
+            set_run_font(r, "zh", 11)
+            p.paragraph_format.space_after = Pt(4)
+
     if summary:
         sh = doc.add_heading("摘要", level=2)
         for run in sh.runs:
@@ -368,12 +446,7 @@ def write_docx(
         for para in sec.get("paragraphs") or []:
             if not str(para).strip():
                 continue
-            p = doc.add_paragraph()
-            r = p.add_run(str(para).strip())
-            set_run_font(r, lang, 12)
-            p.paragraph_format.space_after = Pt(10)
-            p.paragraph_format.line_spacing = 1.35
-            p.paragraph_format.first_line_indent = Cm(0.74)
+            add_body_paragraph(doc, str(para), lang, highlight_phrases)
 
     if not any(sec.get("paragraphs") for sec in sections):
         p = doc.add_paragraph()
@@ -413,6 +486,8 @@ def transcribe_file(
     polish: Optional[str] = None,
     do_notify: bool = False,
     open_docx: bool = False,
+    sidecar_dirs: Optional[list[Path]] = None,
+    subtitle_track: Optional[SubtitleTrack] = None,
 ) -> dict:
     ensure_glossary()
     src = src.expanduser().resolve()
@@ -486,10 +561,30 @@ def transcribe_file(
     raw_out.write_text(raw_full, encoding="utf-8")
     log(f"RAW saved {raw_out} chars={len(raw_full)}")
 
+    extras = list(sidecar_dirs or [])
+    extras.append(src.parent)
+    track = subtitle_track or find_subtitles(src, job, extra_dirs=extras, prefer=lang if lang in {"zh", "en", "bo"} else "zh")
+    proof_stats: dict = {}
+    highlight_phrases: list[str] = []
+    working = list(texts)
+    if track and track.cues:
+        triples = []
+        for i, text in enumerate(texts):
+            start, dur = plan[i] if i < len(plan) else (0.0, 0.0)
+            triples.append((start, dur, text))
+        results, proof_stats = proofread_chunks(triples, track, use_model=(polish != "none"))
+        working = [r.text for r in results]
+        highlight_phrases = list(dict.fromkeys(proof_stats.get("unresolved") or []))
+        log(
+            f"PROOFREAD source={track.source} cues={len(track.cues)} "
+            f"corrections={proof_stats.get('corrections')} unresolved={len(highlight_phrases)}"
+        )
+    proof_note = format_proofread_note(proof_stats) if proof_stats else ""
+
     sections = []
     notes = []
     provider_used = "none"
-    for i, text in enumerate(texts):
+    for i, text in enumerate(working):
         if not text.strip():
             continue
         result = polish_text(text, provider=polish)
@@ -503,6 +598,15 @@ def transcribe_file(
     all_paras = [p for s in sections for p in s.get("paragraphs") or []]
     if all_paras and provider_used != "none":
         summary = make_summary(all_paras, provider_used)
+
+    # If a disagreement is not visible in the body, append it so yellow highlights can show.
+    body_text = "\n".join(p for s in sections for p in (s.get("paragraphs") or []))
+    missing_marks = [ph for ph in highlight_phrases if ph and ph not in body_text]
+    if missing_marks:
+        sections.append({
+            "heading": "未能确定的字幕对照",
+            "paragraphs": [f"字幕与识别未能对齐：{ph}" for ph in missing_marks],
+        })
 
     label_map = {"local": "本地千问", "claude": "Claude", "gpt": "GPT", "gemini": "Gemini", "none": "未修饰"}
     note = "；".join(dict.fromkeys(notes))
@@ -518,6 +622,8 @@ def transcribe_file(
         duration=duration,
         polish_label=label_map.get(provider_used, provider_used),
         raw_appendix=texts if include_raw else None,
+        proofread_note=proof_note,
+        highlight_phrases=highlight_phrases,
     )
     elapsed = time.perf_counter() - t0
     rtf_x = (duration / elapsed) if elapsed > 0 else 0.0
@@ -542,9 +648,56 @@ def transcribe_file(
     }
 
 
+
+def _safe_stem(name: str) -> str:
+    name = (name or "transcript").strip()
+    name = "".join(ch if ch.isalnum() or ch in "._-（）()《》【】 " else "_" for ch in name)
+    name = name.strip(" ._") or "transcript"
+    return name[:80]
+
+
+def _transcribe_arg(
+    value: str,
+    lang: str,
+    out_dir: Path,
+    polish: Optional[str],
+    do_notify: bool,
+    open_docx: bool,
+) -> dict:
+    if is_media_url(value):
+        dest = work_dir() / "url-downloads" / hashlib.sha1(value.encode()).hexdigest()[:12]
+        dest.mkdir(parents=True, exist_ok=True)
+        log(f"DOWNLOAD {value}")
+        info = download_url(value, dest)
+        media: Path = info["media"]
+        stem = _safe_stem(info.get("title") or media.stem)
+        log(f"DOWNLOADED {media.name} subs={None if not info.get('track') else info['track'].source}")
+        return transcribe_file(
+            media,
+            lang=lang,
+            out_dir=out_dir,
+            output_stem=stem,
+            polish=polish,
+            do_notify=do_notify,
+            open_docx=open_docx,
+            sidecar_dirs=[dest],
+            subtitle_track=info.get("track"),
+        )
+    path = Path(value).expanduser()
+    return transcribe_file(
+        path,
+        lang=lang,
+        out_dir=out_dir,
+        polish=polish,
+        do_notify=do_notify,
+        open_docx=open_docx,
+        sidecar_dirs=[path.parent],
+    )
+
+
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="transcribe", description="把音频转成 Word 文档，默认保存到下载文件夹。")
-    parser.add_argument("files", nargs="*", help="音频文件（可多个）")
+    parser.add_argument("files", nargs="*", help="音频/视频文件，或 YouTube 等网址（可多个）")
     parser.add_argument("--lang", default="auto", help="zh / bo / auto")
     parser.add_argument("--out", default=str(default_out_dir()), help="输出目录")
     parser.add_argument("--polish", default=None, help="local / claude / gpt / gemini / none（默认用设定）")
@@ -572,8 +725,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     rc = 0
     for f in args.files:
         try:
-            result = transcribe_file(
-                Path(f),
+            result = _transcribe_arg(
+                f,
                 lang=args.lang,
                 out_dir=Path(args.out),
                 polish=args.polish,

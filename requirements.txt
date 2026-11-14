@@ -3,3 +3,4 @@ faster-whisper>=1.2.1
 python-docx>=1.2.0
 opencc-python-reimplemented>=0.1.7
 huggingface_hub>=0.36.0
+yt-dlp>=2025.10.14

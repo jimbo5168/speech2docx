@@ -21,7 +21,7 @@ TZ = ZoneInfo("America/Los_Angeles")
 DROP_ROOT_NAME = "语音转文字"
 SUBFOLDERS = {"中文": "zh", "藏文": "bo"}
 DONE_NAME = "完成"
-IGNORE_SUFFIXES = {".download", ".crdownload", ".part", ".tmp", ".temp", ".icloud"}
+IGNORE_SUFFIXES = {".download", ".crdownload", ".part", ".tmp", ".temp", ".icloud", ".srt", ".vtt", ".ass", ".ssa"}
 POLL_SECONDS = 2.0
 STABLE_SECONDS = 2.0
 LIST_SCRIPT = asr_home() / "list_drops.applescript"
@@ -150,7 +150,7 @@ def process_item(item: dict) -> None:
     work_dir().mkdir(parents=True, exist_ok=True)
     staged = finder_move(src, work_dir(), dest_name=original_name)
     try:
-        result = transcribe_file(staged, lang=lang, output_stem=original_stem, do_notify=True)
+        result = transcribe_file(staged, lang=lang, output_stem=original_stem, do_notify=True, sidecar_dirs=[src.parent, staged.parent])
         log(f"Wrote {result['docx']}")
         done_dir = Path.home() / "Desktop" / DROP_ROOT_NAME / DONE_NAME
         final = finder_move(staged, done_dir, dest_name=original_name)

@@ -6,7 +6,7 @@
 
 ---
 
-Local speech-to-text for macOS on Apple Silicon. Drop an MP3, M4A, WAV, or a video (MP4, MOV, MKV, WEBM, …) onto the app icon or a Desktop folder and a formatted Word document appears in Downloads. Video files are converted by extracting the soundtrack first.
+Local speech-to-text for macOS on Apple Silicon. Drop an MP3, M4A, WAV, or a video (MP4, MOV, MKV, WEBM, …) onto the app icon or a Desktop folder and a formatted Word document appears in Downloads. Video files are converted by extracting the soundtrack first. If subtitles are embedded, sit in a sidecar file, or come from a YouTube URL, they are aligned with the ASR text for proofreading; unresolved disagreements are highlighted in yellow.
 
 Audio is transcribed only on the machine. The first-run chooser preselects Local (LM Studio Qwen) so you can check accuracy before switching to a cloud model. By default the Word file also ends with an appendix, 附录：原始转录, containing the unpolished ASR text (turn this off in Settings). Optional polishing can use Local, or a signed-in Claude / ChatGPT / Gemini subscription, or an API key.
 
@@ -16,6 +16,7 @@ Audio is transcribed only on the machine. The first-run chooser preselects Local
 - **藏文识别**：`tenzin/whisper-small-tibetan-ct2`（faster-whisper）
 - **长录音**：自动按约 8 分钟分片，可转 2 小时以上，支持中断后续传
 - **视频输入**：可把 MP4 / MOV / MKV / WEBM 等视频拖到应用、桌面文件夹或命令行，会先抽出音轨再转写
+- **字幕校对**：若视频有内嵌字幕、同名的 SRT/VTT/ASS，或命令行给出 YouTube 网址，会把字幕与识别结果对照；能确定的按字幕和佛教词库修正，无法确定的在 Word 里黄标，并写「校对说明」。YouTube 官方字幕优先，自动字幕会标明可信度较低
 - **佛教词库**：可编辑的专有名词表，同时用于识别提示和文字修饰
 - **自动修饰**：修正同音错字、去掉「啊 / 呃 / 嗯」、分段和标题；可加一段标明的「摘要」
 - **只输出 DOCX**：默认在文档末尾附「附录：原始转录」（未修饰原文，便于对照准确度）；可在设定中关闭。识别初稿同时保存在本机日志目录
@@ -67,6 +68,7 @@ cd Speech2Docx
 ```bash
 transcribe lecture.mp3
 transcribe lecture.mp4
+transcribe https://www.youtube.com/watch?v=VIDEO_ID
 transcribe lecture.mp3 --lang zh
 transcribe lecture.mp3 --lang bo
 transcribe lecture.mp3 --polish local
