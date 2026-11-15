@@ -106,9 +106,11 @@ def join_overlap(parts):
 def assess(original, short, reason, sensitive=False):
     original_chars, short_chars = compact(original), compact(short)
     if not short_chars:
-        return original, not original_chars
+        return original, not original_chars or reason == "repeat"
     if repeat(short, sensitive=sensitive):
-        return original, False
+        old_repeat = repeat(original, sensitive=sensitive)
+        confirmed = old_repeat and short_chars.count(old_repeat[0]) >= old_repeat[1]
+        return original, reason == "repeat" and not confirmed
     if not original_chars:
         return short, False
     similarity = difflib.SequenceMatcher(None, original_chars, short_chars, autojunk=False).ratio()
