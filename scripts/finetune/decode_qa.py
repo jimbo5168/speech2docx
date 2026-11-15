@@ -107,6 +107,8 @@ def assess(original, short, reason, sensitive=False):
     original_chars, short_chars = compact(original), compact(short)
     if not short_chars or repeat(short, sensitive=sensitive):
         return original, False
+    if not original_chars:
+        return short, False
     similarity = difflib.SequenceMatcher(None, original_chars, short_chars, autojunk=False).ratio()
     if reason == "repeat":
         old = repeat(original, sensitive=sensitive)
@@ -122,8 +124,12 @@ def assess(original, short, reason, sensitive=False):
 
 def run_qa(rows, hyps, decode, mode="combined"):
     """Select text without references and mark unresolved large disagreements."""
+    if len(rows) != len(hyps):
+        raise ValueError("Every segment must have one first-pass hypothesis")
     sensitive = mode.endswith("_sensitive")
     mode = mode.removesuffix("_sensitive")
+    if mode not in ("omission", "repetition", "combined"):
+        raise ValueError(f"Unknown QA mode: {mode}")
     regions = [speech_regions(row["audio"], row["end"] - row["start"]) for row in rows]
     rates = [
         len(compact(hypothesis)) / max(sum(end - start for start, end in speech), 0.2)
