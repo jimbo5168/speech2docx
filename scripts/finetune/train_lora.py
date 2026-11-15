@@ -6,7 +6,7 @@ the text decoder's attention and MLP projections.
 
 Usage: train_lora.py --data data/train.jsonl --val data/val.jsonl --out runs/r1
 """
-import argparse, json, math, os, random, time
+import argparse, json, math, os, random, time, re, subprocess, shutil
 from pathlib import Path
 
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
@@ -91,6 +91,34 @@ def loss_fn(inner, ids, feat, first, n, plen):
     return nn.losses.cross_entropy(logits, labels, reduction="mean")
 
 
+def resource_guard():
+    """Pause under memory pressure; never change other loaded models."""
+    while True:
+        result = subprocess.check_output(["memory_pressure"], text=True)
+        free = int(re.search(r"free percentage: (\d+)", result)[1])
+        if free >= 15:
+            break
+        print(f"Memory free {free}%; pausing 60s", flush=True)
+        time.sleep(60)
+    if shutil.disk_usage(Path.cwd()).free < 50 * 1024**3:
+        raise RuntimeError("Less than 50 GiB free disk")
+
+
+class DiskFeatures:
+    def __init__(self, root):
+        self.root = Path(root)
+        self.root.mkdir(parents=True, exist_ok=True)
+
+    def __setitem__(self, key, value):
+        mx.save(str(self.root / (key + ".npy")), value)
+
+    def __getitem__(self, key):
+        return mx.load(str(self.root / (key + ".npy")))
+
+    def __len__(self):
+        return len(list(self.root.glob("*.npy")))
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True); ap.add_argument("--val", required=True)
@@ -99,6 +127,7 @@ def main():
     ap.add_argument("--rank", type=int, default=16); ap.add_argument("--alpha", type=float, default=32)
     ap.add_argument("--accum", type=int, default=4); ap.add_argument("--sys-prob", type=float, default=0.3)
     ap.add_argument("--system-prompt-file", default="")
+    ap.add_argument("--feature-cache-dir", default="", help="Keep audio features on disk to bound memory")
     a = ap.parse_args()
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
     random.seed(0); mx.random.seed(0)
@@ -109,8 +138,9 @@ def main():
     rows = [json.loads(l) for l in open(a.data)]
     vrows = [json.loads(l) for l in open(a.val)]
     t0 = time.time()
-    cache = {}
+    cache = DiskFeatures(a.feature_cache_dir) if a.feature_cache_dir else {}
     for r in rows + vrows:
+        resource_guard()
         f, n = audio_feats(inner, r["audio"]); mx.eval(f); cache[r["id"]] = f
     print(f"cached {len(cache)} audio features in {time.time()-t0:.0f}s", flush=True)
 
@@ -140,6 +170,7 @@ def main():
     for ep in range(1, a.epochs + 1):
         random.shuffle(rows)
         for r in rows:
+            resource_guard()
             sp = system_prompt if (system_prompt and random.random() < a.sys_prob) else ""
             ids, first, n, plen = build(inner, cache[r["id"]], r["text"], sp)
             l, g = vg(ids, cache[r["id"]], first, n, plen)
