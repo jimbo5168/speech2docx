@@ -16,11 +16,14 @@ ap.add_argument("model"); ap.add_argument("test"); ap.add_argument("out")
 ap.add_argument("--max-end", type=float, default=0); ap.add_argument("--system-prompt-file", default="")
 ap.add_argument("--repetition-penalty", type=float, default=1.15)
 ap.add_argument("--token-budget-multiplier", type=int, default=1)
+ap.add_argument("--qa-confidence-margin", type=float, default=None)
 ap.add_argument("--qa-mode", choices=["omission", "repetition", "combined",
                                       "repetition_sensitive", "combined_sensitive"], default="")
 ap.add_argument("--normalize-variants", action="store_true",
                 help="Add variant-normalized metrics while retaining original accuracy/edits")
 a = ap.parse_args()
+if a.qa_confidence_margin is not None and (not a.qa_mode or not math.isfinite(a.qa_confidence_margin)):
+    ap.error("a finite QA confidence margin requires --qa-mode")
 rows = [json.loads(l) for l in open(a.test)]
 rows = [r for r in rows if r.get("keep", True) and (not a.max_end or r["end"] <= a.max_end + 1)]
 try:
@@ -48,7 +51,7 @@ if a.qa_mode:
     import numpy as np
     from mlx_audio.stt.utils import load_audio
     from prep_segments import write_wav
-    from decode_qa import run_qa
+    from decode_qa import run_qa, select_by_confidence
 
     with tempfile.TemporaryDirectory(prefix="qa-", dir=Path(a.out).parent) as temporary:
         piece = Path(temporary) / "piece.wav"
@@ -65,6 +68,30 @@ if a.qa_mode:
             return cc(result.text.strip())
 
         hyps, events = run_qa(rows, hyps, decode, a.qa_mode)
+        if a.qa_confidence_margin is not None:
+            from mlx_audio.lm.sample_utils import make_logits_processors, make_sampler
+
+            def score_decode(row, start, end, whole=False):
+                resource_guard()
+                audio = np.array(load_audio(row["audio"]))
+                if not whole:
+                    audio = audio[int(start * 16000):int(end * 16000)]
+                tokens, logprobs = [], []
+                penalty = a.repetition_penalty if whole else 1.0
+                for token, probabilities in m.stream_generate(
+                    audio, language="Chinese", max_tokens=int((end - start) * 15) + 80,
+                    sampler=make_sampler(0.0), verbose=False,
+                    logits_processors=make_logits_processors(
+                        repetition_penalty=penalty, repetition_context_size=100),
+                ):
+                    tokens.append(int(token))
+                    logprobs.append(float(probabilities[int(token)].item()))
+                text = cc(m._tokenizer.decode(tokens, skip_special_tokens=True).strip())
+                return {"text": text, "token_logprobs": logprobs}
+
+            hyps, events = select_by_confidence(
+                rows, hyps, events, score_decode, a.qa_confidence_margin)
+
 ref = "\n".join(r["text"] for r in rows)
 hyp = "\n".join(hyps)
 hyp_for_score = hyp.replace("〔待回听〕", "") if a.qa_mode else hyp
@@ -80,8 +107,9 @@ res = {"model": a.model, "segments": len(rows), "audio_min": round(sum(r['end']-
        "real_time_factor": (time.time() - t0) / max(1, sum(r["end"] - r["start"] for r in rows))}
 if a.qa_mode:
     res["qa_mode"] = a.qa_mode
+    res["qa_confidence_margin"] = a.qa_confidence_margin
     res["qa_flags"] = len(events)
-    res["qa_replacements"] = sum(event["chosen"].replace("〔待回听〕", "") != event["original"] for event in events)
+    res["qa_replacements"] = sum(event.get("confidence_chosen", event["chosen"]).replace("〔待回听〕", "") != event["original"] for event in events)
     res["review_markers_per_hour"] = hyp.count("〔待回听〕") / max(1e-9, sum(row["end"] - row["start"] for row in rows) / 3600)
 if a.normalize_variants:
     variant = score(ref, hyp_for_score, normalize_variants=True)

@@ -171,3 +171,36 @@ def run_qa(rows, hyps, decode, mode="combined"):
             ))
         output.append(chosen)
     return output, events
+
+
+def select_by_confidence(rows, hyps, events, score_decode, margin=0.03):
+    """Veto QA replacements whose mean selected-token log probability is lower.
+
+    score_decode(row, start, end, whole=False) returns text and token_logprobs.
+    Whole-input scoring must preserve every sample of the original segment.
+    These length-normalized model scores are a selection heuristic.
+    """
+    output = list(hyps)
+    by_id = {row["id"]: row for row in rows}
+    indices = {row["id"]: index for index, row in enumerate(rows)}
+    scored_events = []
+    for event in events:
+        row = by_id[event["id"]]
+        duration = row["end"] - row["start"]
+        original = score_decode(row, 0, duration, whole=True)
+        regions = speech_regions(row["audio"], duration)
+        pieces = [score_decode(row, start, end) for start, end in windows(regions, duration)]
+        short = join_overlap([piece["text"] for piece in pieces])
+        if compact(original["text"]) != compact(event["original"]) or compact(short) != compact(event["redecode"]):
+            raise ValueError("Confidence decoding must reproduce the compared hypotheses")
+        original_scores = original["token_logprobs"]
+        short_scores = [score for piece in pieces for score in piece["token_logprobs"]]
+        original_mean = statistics.mean(original_scores) if original_scores else float("-inf")
+        short_mean = statistics.mean(short_scores) if short_scores else float("-inf")
+        chosen = event["chosen"] if short_mean >= original_mean + margin else event["original"]
+        output[indices[row["id"]]] = chosen
+        scored_events.append(dict(
+            event, original_mean_logprob=original_mean,
+            redecode_mean_logprob=short_mean, confidence_chosen=chosen,
+        ))
+    return output, scored_events
