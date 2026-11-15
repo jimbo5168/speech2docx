@@ -105,7 +105,9 @@ def join_overlap(parts):
 
 def assess(original, short, reason, sensitive=False):
     original_chars, short_chars = compact(original), compact(short)
-    if not short_chars or repeat(short, sensitive=sensitive):
+    if not short_chars:
+        return original, not original_chars
+    if repeat(short, sensitive=sensitive):
         return original, False
     if not original_chars:
         return short, False
