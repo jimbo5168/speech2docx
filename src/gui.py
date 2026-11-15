@@ -30,7 +30,7 @@ from config import (
 from glossary import ensure_glossary
 from media import MEDIA_EXTS
 from paths import asr_home, default_out_dir
-from polish import cli_login_status, keychain_set, login_command
+from polish import DEFAULT_LEAD_PROMPT, cli_login_status, keychain_set, login_command
 from settings import first_run_if_needed
 from subtitles import is_media_url
 from transcribe import _transcribe_arg
@@ -199,6 +199,10 @@ class AppState:
                 "polish_provider": cfg.get("polish_provider", "local"),
                 "auth_mode": cfg.get("auth_mode") or {},
                 "include_raw_appendix": bool(cfg.get("include_raw_appendix", True)),
+                "include_summary": bool(cfg.get("include_summary", False)),
+                "include_headings": bool(cfg.get("include_headings", False)),
+                "polish_lead_prompt": (cfg.get("polish_lead_prompt") or "").strip() or DEFAULT_LEAD_PROMPT,
+                "polish_lead_prompt_default": DEFAULT_LEAD_PROMPT,
                 "english_output": cfg.get("english_output") or "bilingual",
                 "template_path": template,
                 "template_display": Path(template).name if template else "默认版式",
@@ -451,6 +455,13 @@ class JsApi:
             cfg["polish_provider"] = provider
         if "include_raw_appendix" in payload:
             cfg["include_raw_appendix"] = bool(payload.get("include_raw_appendix"))
+        if "include_summary" in payload:
+            cfg["include_summary"] = bool(payload.get("include_summary"))
+        if "include_headings" in payload:
+            cfg["include_headings"] = bool(payload.get("include_headings"))
+        if "polish_lead_prompt" in payload:
+            lead = str(payload.get("polish_lead_prompt") or "")
+            cfg["polish_lead_prompt"] = lead if lead.strip() else DEFAULT_LEAD_PROMPT
         if payload.get("english_output") in {"bilingual", "zh"}:
             cfg["english_output"] = payload["english_output"]
         if provider in CLOUD_PROVIDERS and payload.get("auth_mode") in {"login", "api_key"}:

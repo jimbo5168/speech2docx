@@ -68,7 +68,7 @@ Click the Dock or Applications icon to open the window. You can drop files onto 
    - 贴上 YouTube 链接，再点「转换」（有官方字幕时会用来校对）
 4. 需要的话点「更改…」另选输出位置
 5. 队列里会显示「等待 / 转录中 / 校对中 / 修饰中 / 完成 / 失败」。完成后可「打开文档」或「在 Finder 中显示」
-6. 「设定」页可改修饰模型、附录、英文对照、佛教词库和 Word 模板
+6. 「设定」页可改修饰模型、附录、是否生成摘要或小节标题（默认关闭）、校对提示词、佛教词库和 Word 模板。校对提示词会放在修饰模型提示的最前面。
 
 ![主画面](docs/gui-main.png)
 

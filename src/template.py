@@ -178,6 +178,7 @@ def _add_title_block(
     duration_label: str,
     polish_label: str,
     when: str,
+    asr_label: str = "",
 ) -> None:
     from docx.shared import RGBColor
 
@@ -201,7 +202,8 @@ def _add_title_block(
     _spacing(p, line=360, after=0)
     _set_run_font(p.add_run("听打稿"), SPEAKER_FONT, 12)
 
-    meta = f"来源：{source_name}    时长：{duration_label}    转写时间：{when}    修饰：{polish_label}"
+    asr_bit = f"    识别：{asr_label}" if asr_label else ""
+    meta = f"来源：{source_name}    时长：{duration_label}    转写时间：{when}{asr_bit}    修饰：{polish_label}"
     p = _add_styled_paragraph(doc, STYLE_PLAIN)
     _align(p, "center")
     _spacing(p, line=280, before=80, after=80)
@@ -347,6 +349,7 @@ def write_from_template(
     lang: str,
     duration_label: str,
     polish_label: str,
+    asr_label: str = "",
     raw_appendix: str | list[str] | None = None,
     proofread_note: str = "",
     highlight_phrases: list[str] | None = None,
@@ -369,7 +372,7 @@ def write_from_template(
     when = datetime.now(TZ).strftime("%Y-%m-%d %H:%M")
     shown = display_title(title)
     who = speaker or infer_speaker(shown, sections, source_name)
-    _add_title_block(doc, shown, who, source_name, duration_label, polish_label, when)
+    _add_title_block(doc, shown, who, source_name, duration_label, polish_label, when, asr_label=asr_label)
     has_cjk = any("一" <= ch <= "鿿" for ch in (title_zh or ""))
     if title_zh and has_cjk and title_zh not in shown and title_zh not in (title or ""):
         p = _add_styled_paragraph(doc, STYLE_PLAIN)

@@ -45,7 +45,7 @@ from paths import (
     raw_dir,
     work_dir,
 )
-from polish import make_summary, polish_text, translate_english
+from polish import make_summary, polish_text, protect_review_markers, restore_review_markers, translate_english
 from template import write_from_template
 
 TZ = ZoneInfo("America/Los_Angeles")
@@ -134,7 +134,8 @@ def to_simplified(text: str) -> str:
         if _opencc is None:
             from opencc import OpenCC
             _opencc = OpenCC("t2s")
-        return _opencc.convert(text)
+        protected, held = protect_review_markers(text)
+        return restore_review_markers(_opencc.convert(protected), held)
     except Exception:
         return text
 
@@ -165,12 +166,97 @@ def load_tibetan():
     return _tibetan_model
 
 
-def transcribe_qwen(wav: Path, lang: Optional[str]) -> str:
+ASR_PRIORITY_TERMS = [
+    "论典", "不堕两边", "出离心", "菩提心", "顺缘", "违缘",
+    "因明", "依止五火", "阿赖耶识", "五部大论", "善根", "根机",
+    "殊胜", "常见", "断见", "苦行", "精进", "五欲", "少欲知足",
+    "亲友书", "慈诚罗珠堪布", "米拉日巴", "龙树菩萨", "大圆满", "堪布",
+]
+
+
+def asr_model_label(lang: str) -> str:
+    if lang == "bo":
+        return "Tibetan Whisper small（tenzin/whisper-small-tibetan-ct2，本地）"
+    return "Qwen3-ASR 1.7B-8bit（mlx-community，本地）"
+
+
+def _qwen_bias() -> tuple[list[str], str]:
+    terms: list[str] = []
+    seen: set[str] = set()
+    for term in ASR_PRIORITY_TERMS + as_hotwords(400):
+        if term and term not in seen:
+            seen.add(term)
+            terms.append(term)
+    block = "、".join(terms)
+    if len(block) > 4000:
+        block = block[:4000].rsplit("、", 1)[0]
+    prompt = (
+        "请准确识别这段藏传佛教讲课中的专有名词与术语，按词表用字，"
+        "不要把「论典」听成「论点」，不要把「出离心」听成「处理心」，"
+        "不要把「顺缘」「违缘」听成「损缘」「微缘」，"
+        "不要把「不堕两边」听成「不多两边」，"
+        "不要把「因明」「依止五火」听成「遗民」「一枝乌火」。词表："
+        + block
+    )
+    return terms, prompt
+
+
+def find_runaway_repeat(text: str, min_times: int = 6) -> tuple[str, int] | None:
+    """Return (phrase, count) if a 2–40 character phrase repeats consecutively."""
+    if not text or len(text) < 12:
+        return None
+    import re
+    pat = re.compile(r"(.{2,40}?)\1{" + str(min_times - 1) + r",}")
+    match = pat.search(text)
+    if not match:
+        return None
+    phrase = match.group(1)
+    count = 0
+    idx = match.start()
+    while text.startswith(phrase, idx):
+        count += 1
+        idx += len(phrase)
+    return phrase, count
+
+
+def collapse_runaway_repeats(text: str, min_times: int = 6) -> tuple[str, int]:
+    """Keep one copy of each runaway consecutive repeat. Returns (text, collapsed_runs)."""
+    if not text:
+        return text, 0
+    import re
+    runs = 0
+    pat = re.compile(r"(.{2,40}?)(\1){" + str(min_times - 1) + r",}")
+
+    def _sub(match: "re.Match") -> str:
+        nonlocal runs
+        runs += 1
+        return match.group(1)
+
+    # Repeat until stable; a long file may have more than one site.
+    out = text
+    for _ in range(8):
+        nxt, n = pat.subn(_sub, out)
+        if n == 0:
+            break
+        out = nxt
+    return out, runs
+
+
+def transcribe_qwen(
+    wav: Path,
+    lang: Optional[str],
+    repetition_penalty: float = 1.15,
+    temperature: float = 0.0,
+) -> str:
     model = load_qwen()
-    kwargs = {"verbose": False, "hotwords": as_hotwords(250)}
-    block = as_prompt_block(2000)
-    if block:
-        kwargs["system_prompt"] = "请准确识别佛教讲课中的专有名词，例如：" + block
+    hotwords, system_prompt = _qwen_bias()
+    kwargs = {
+        "verbose": False,
+        "hotwords": hotwords,
+        "system_prompt": system_prompt,
+        "repetition_penalty": repetition_penalty,
+        "temperature": temperature,
+    }
     if lang and lang not in ("auto", "bo"):
         qwen_lang = LANG_TO_QWEN.get(lang, lang)
         if str(qwen_lang).lower() == "zh":
@@ -187,6 +273,57 @@ def transcribe_qwen(wav: Path, lang: Optional[str]) -> str:
             parts.append(s.get("text") if isinstance(s, dict) else getattr(s, "text", ""))
         text = "".join(p or "" for p in parts).strip()
     return to_simplified(text)
+
+
+def transcribe_chunk_with_guard(
+    media_src: Path,
+    wav_dir: Path,
+    start: float,
+    dur: float,
+    lang: str,
+    index: int,
+) -> str:
+    """Transcribe one planned chunk; if the ASR loops, retry in shorter slices."""
+    wav = wav_dir / f"{index:03d}.wav"
+    to_wav16k(media_src, wav, start=start, duration=dur)
+    try:
+        if lang == "bo":
+            text = transcribe_tibetan(wav)
+        else:
+            text = transcribe_qwen(wav, lang, repetition_penalty=1.15)
+        found = find_runaway_repeat(text)
+        if not found:
+            return text
+        phrase, times = found
+        log(f"REPEAT in chunk {index+1}: {phrase!r} x{times}; retrying in 60s slices")
+        parts: list[str] = []
+        for j, (sub_start, sub_dur) in enumerate(plan_chunks(dur, 60.0, 3.0)):
+            sub = wav_dir / f"{index:03d}-{j:02d}.wav"
+            to_wav16k(media_src, sub, start=start + sub_start, duration=sub_dur)
+            try:
+                if lang == "bo":
+                    piece = transcribe_tibetan(sub)
+                else:
+                    piece = transcribe_qwen(sub, lang, repetition_penalty=1.35)
+            finally:
+                try:
+                    sub.unlink()
+                except OSError:
+                    pass
+            piece, collapsed = collapse_runaway_repeats(piece)
+            if collapsed:
+                log(f"REPEAT collapsed in slice {index+1}.{j+1} runs={collapsed}")
+            parts.append(piece)
+        joined = "".join(parts)
+        joined, collapsed = collapse_runaway_repeats(joined)
+        if collapsed:
+            log(f"REPEAT collapsed after retry in chunk {index+1} runs={collapsed}")
+        return joined
+    finally:
+        try:
+            wav.unlink()
+        except OSError:
+            pass
 
 
 def load_wav_mono_f32(path: Path):
@@ -398,6 +535,7 @@ def write_docx(
     lang: str,
     duration: float,
     polish_label: str,
+    asr_label: str = "",
     raw_appendix: str | list[str] | None = None,
     overwrite: bool = False,
     proofread_note: str = "",
@@ -420,6 +558,7 @@ def write_docx(
             lang=lang,
             duration_label=format_duration(duration),
             polish_label=polish_label,
+            asr_label=asr_label,
             raw_appendix=raw_appendix,
             proofread_note=proofread_note,
             highlight_phrases=highlight_phrases,
@@ -439,6 +578,7 @@ def write_docx(
             lang,
             duration,
             polish_label,
+            asr_label=asr_label,
             raw_appendix=raw_appendix,
             overwrite=True,
             proofread_note=proofread_note,
@@ -456,6 +596,7 @@ def _write_docx_plain(
     lang: str,
     duration: float,
     polish_label: str,
+    asr_label: str = "",
     raw_appendix: str | list[str] | None = None,
     overwrite: bool = False,
     proofread_note: str = "",
@@ -492,7 +633,8 @@ def _write_docx_plain(
 
     when = datetime.now(TZ).strftime("%Y-%m-%d %H:%M %Z")
     meta = doc.add_paragraph()
-    r = meta.add_run(f"来源：{source_name}    时长：{format_duration(duration)}    转写时间：{when}    修饰：{polish_label}")
+    asr_bit = f"    识别：{asr_label}" if asr_label else ""
+    r = meta.add_run(f"来源：{source_name}    时长：{format_duration(duration)}    转写时间：{when}{asr_bit}    修饰：{polish_label}")
     set_run_font(r, "zh", 10)
     r.italic = True
     r.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
@@ -627,30 +769,30 @@ def transcribe_file(
     with FileLock(LOCK_PATH):
         for i, (start, dur) in enumerate(plan):
             raw_path = raw_chunks / f"{i:03d}.txt"
+            cached = ""
             if raw_path.exists() and raw_path.stat().st_size > 0:
-                texts.append(raw_path.read_text(encoding="utf-8"))
+                cached = raw_path.read_text(encoding="utf-8")
+            if cached and not find_runaway_repeat(cached):
+                texts.append(cached)
                 log(f"RESUME chunk {i+1}/{len(plan)}")
                 pct = 5 + int(70 * (i + 1) / max(len(plan), 1))
                 emit_progress(on_progress, "transcribe", pct, f"沿用已识别片段 {i+1}/{len(plan)}")
                 continue
-            wav = wav_dir / f"{i:03d}.wav"
-            to_wav16k(media_src, wav, start=start, duration=dur)
-            if lang == "bo":
-                text = transcribe_tibetan(wav)
-            else:
-                text = transcribe_qwen(wav, lang)
+            if cached and find_runaway_repeat(cached):
+                log(f"REPEAT in cached chunk {i+1}/{len(plan)}; re-running")
+            text = transcribe_chunk_with_guard(media_src, wav_dir, start, dur, lang, i)
             raw_path.write_text(text, encoding="utf-8")
             texts.append(text)
-            try:
-                wav.unlink()
-            except OSError:
-                pass
             log(f"ASR chunk {i+1}/{len(plan)} start={start:.0f}s chars={len(text)}")
             pct = 5 + int(70 * (i + 1) / max(len(plan), 1))
             emit_progress(on_progress, "transcribe", pct, f"正在识别 {i+1}/{len(plan)}…")
 
     # Drop overlap repetition lightly: if adjacent chunks share a long tail/head, keep later start unique
     raw_full = "\n".join(t.strip() for t in texts if t.strip())
+    raw_full, collapsed = collapse_runaway_repeats(raw_full)
+    if collapsed:
+        log(f"REPEAT collapsed in joined raw runs={collapsed} chars={len(raw_full)}")
+        texts = [collapse_runaway_repeats(t)[0] for t in texts]
     raw_out = raw_dir() / f"{stem}-{jid}.txt"
     raw_out.write_text(raw_full, encoding="utf-8")
     log(f"RAW saved {raw_out} chars={len(raw_full)}")
@@ -717,14 +859,20 @@ def transcribe_file(
             provider_used = result["provider_used"]
             if result.get("note"):
                 notes.append(result["note"])
-            sections.append({"heading": result.get("heading") or "", "paragraphs": result["paragraphs"]})
-            log(f"POLISH chunk {i+1}/{len(texts)} via {provider_used}")
+            heading = result.get("heading") or ""
+            if not bool(cfg.get("include_headings", False)):
+                heading = ""
+            sections.append({"heading": heading, "paragraphs": result["paragraphs"]})
+            log(
+                f"POLISH chunk {i+1}/{len(texts)} via {provider_used} "
+                f"lead_chars={result.get('lead_chars') or 0}"
+            )
             pct = 86 + int(8 * (i + 1) / max(len(working), 1))
             emit_progress(on_progress, "polish", min(pct, 94), f"正在修饰 {i+1}/{len(working)}…")
 
     summary = ""
     all_paras = [p for s in sections for p in s.get("paragraphs") or []]
-    if all_paras and provider_used != "none":
+    if all_paras and provider_used != "none" and bool(cfg.get("include_summary", False)):
         summary = make_summary(all_paras, provider_used)
 
     # If a disagreement is not visible in the body, append it so yellow highlights can show.
@@ -739,6 +887,7 @@ def transcribe_file(
     label_map = {"local": "本地千问", "claude": "Claude", "gpt": "GPT", "gemini": "Gemini", "none": "未修饰"}
     note = "；".join(dict.fromkeys(notes))
     include_raw = bool(cfg.get("include_raw_appendix", True))
+    asr_label = asr_model_label(lang)
     emit_progress(on_progress, "write", 96, "正在生成 Word 文档…")
     docx_path = write_docx(
         out_dir / f"{stem}.docx",
@@ -750,6 +899,7 @@ def transcribe_file(
         lang="bo" if lang == "bo" else "zh",
         duration=duration,
         polish_label=label_map.get(provider_used, provider_used),
+        asr_label=asr_label,
         raw_appendix=texts if include_raw else None,
         proofread_note=proof_note,
         highlight_phrases=highlight_phrases,

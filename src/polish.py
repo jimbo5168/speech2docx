@@ -7,6 +7,7 @@ API keys are read from the macOS Keychain, never from disk or logs.
 from __future__ import annotations
 
 import json
+import re
 import time
 import os
 import shutil
@@ -20,21 +21,115 @@ from config import CLOUD_PROVIDERS, KEYCHAIN_SERVICE, load_config
 from glossary import as_prompt_block, as_translation_glossary
 from paths import asr_home, work_dir
 
-SYSTEM_PROMPT = """你是一位严谨的汉传与藏传佛教讲记文字编辑。请润色下面的语音识别初稿。
+DEFAULT_LEAD_PROMPT = """你是一個藏傳佛教的大勘布，學過和圓滿五部大論和大圓滿密法。請依原文順序，校正能從上下文確定的同音錯字、請一個字一個字的教對，不改句字的結構，不刪句字，但修掉不必要的字如“哈哈哈” ， 把錯別字改正，前後文要合理對應，都是用佛教用語，佛學術語、人名和標點。保留原句、數字、例子、否定詞和講者的口語。禁止摘要、改寫、刪句、補句或新增標題。遇到不確定的詞，保留原字並在旁加上〔待回聽〕。只輸出校對後的逐字稿。
+詞彙參考：慈誠羅珠堪布、米拉日巴、龍樹菩薩、《親友書》、論典、五部大論、善根、根機、殊勝、出離心、菩提心、不墮兩邊、常見、斷見、順緣、違緣、因明、依止五火、阿賴耶識、苦行、精進、五欲、少欲知足。請依上下文判斷，尤其核對出離心與菩提心、順緣與違緣。謝謝。"""
 
-要求：
-1. 修正同音或近音错字，尤其是佛教用语。若初稿写成「委员」，在讲修行障碍的语境里应改为「违缘」；其他类似错误一并按佛教惯用词改正。
-2. 删除口语填充词（啊、呃、嗯、这个这个、那个那个等），但不要改变原意。
-3. 补上正确的标点，并分成自然段落。
-4. 忠实于原意：不要摘要代替正文，不要增补讲者没说的内容，不要改写教义。
-5. 专有名词以词库为准。
-6. 只用简体中文输出（藏文原文保持藏文，不要翻译）。
-7. 严格按 JSON 输出，不要Markdown，不要额外说明。格式：
-{"heading": "可选的本节小标题，若看不出主题则用空字符串", "paragraphs": ["段落1", "段落2"]}
+SYSTEM_PROMPT = """请继续按上面的要求做逐字校对。补充说明：
+1. 只改正能从上下文确定的同音错字、佛教术语、人名和标点，不要摘要、改写、删句、补句或新增标题。
+2. 文中的〔待回聽〕或〔待回听〕必须原样保留，不得删除或改写。
+3. 专有名词以词库为准，尤其核对出离心与菩提心、顺缘与违缘、论典、不堕两边、因明、依止五火。
+4. 可以直接输出校对后的逐字稿；若使用 JSON，格式必须是 {"paragraphs": ["段落1", "段落2"]}，heading 必须是空字符串。
 """
 
 SUMMARY_PROMPT = """请为下面已经润色的佛教开示文字写一段不超过200字的摘要。
 只概括讲者实际说到的内容，不要添加新观点。只用简体中文。不要用 Markdown。直接输出摘要正文。"""
+
+
+REVIEW_MARKERS = ("〔待回聽〕", "〔待回听〕")
+
+
+def lead_prompt(cfg: Optional[dict] = None) -> str:
+    cfg = cfg or load_config()
+    user = cfg.get("polish_lead_prompt")
+    if isinstance(user, str) and user.strip():
+        return user.strip()
+    return DEFAULT_LEAD_PROMPT
+
+
+def polish_system_prompt(cfg: Optional[dict] = None) -> str:
+    cfg = cfg or load_config()
+    return lead_prompt(cfg) + "\n\n" + SYSTEM_PROMPT
+
+
+def protect_review_markers(text: str) -> tuple[str, dict[str, str]]:
+    held: dict[str, str] = {}
+    out = text or ""
+    for i, marker in enumerate(REVIEW_MARKERS):
+        key = f"<<<ASRREV{i}>>>"
+        if marker in out:
+            out = out.replace(marker, key)
+            held[key] = marker
+    return out, held
+
+
+def restore_review_markers(text: str, held: dict[str, str]) -> str:
+    out = text or ""
+    for key, marker in held.items():
+        out = out.replace(key, marker)
+    return out
+
+
+def _content_chars(text: str) -> str:
+    out: list[str] = []
+    for ch in text or "":
+        if ch.isalnum() or "\u4e00" <= ch <= "\u9fff" or "\u3400" <= ch <= "\u4dbf" or "\u0f00" <= ch <= "\u0fff":
+            out.append(ch)
+    return "".join(out)
+
+
+def _number_tokens(text: str) -> list[str]:
+    return re.findall(r"[0-9]+|[零〇一二三四五六七八九十百千万亿兩两]{2,}", text or "")
+
+
+def _negation_counts(text: str) -> dict[str, int]:
+    keys = "不非没未無无莫勿否"
+    return {ch: (text or "").count(ch) for ch in keys}
+
+
+def _split_polish_chunks(text: str, target: int = 1200, max_len: int = 1500) -> list[str]:
+    text = (text or "").strip()
+    if not text:
+        return []
+    if len(text) <= max_len:
+        return [text]
+    pieces = re.split(r"(?<=[。！？；!?;\n])", text)
+    parts: list[str] = []
+    buf = ""
+    for piece in pieces:
+        if not piece:
+            continue
+        if buf and len(buf) + len(piece) > max_len:
+            parts.append(buf.strip())
+            buf = piece
+        else:
+            buf += piece
+            if len(buf) >= target:
+                parts.append(buf.strip())
+                buf = ""
+    if buf.strip():
+        parts.append(buf.strip())
+    return parts or [text]
+
+
+def _polish_is_safe(raw: str, polished: str) -> tuple[bool, str]:
+    raw_c = _content_chars(raw)
+    pol_c = _content_chars(polished)
+    if not raw_c:
+        return True, ""
+    ratio = len(pol_c) / max(len(raw_c), 1)
+    if ratio < 0.85 or ratio > 1.15:
+        return False, f"长度变化 {ratio:.0%}（超过 15%）"
+    missing_nums = [tok for tok in _number_tokens(raw) if tok not in (polished or "")]
+    if missing_nums:
+        return False, "数字被删：" + "、".join(missing_nums[:6])
+    phrases = ("并非", "不是", "没有", "不必", "不能", "不会", "不要", "不需要", "不得")
+    missing = [ph for ph in phrases if ph in raw and ph not in polished]
+    if missing:
+        return False, "否定词被删：" + "、".join(missing)
+    if raw.count("非") > polished.count("非"):
+        return False, "否定词减少：非"
+    return True, ""
+
 
 
 def _keychain_get(provider: str) -> Optional[str]:
@@ -270,7 +365,7 @@ def polish_local(prompt: str, system: str, cfg: dict) -> str:
             pass
     body = {
         "model": model,
-        "temperature": 0.2,
+        "temperature": 0.0,
         "messages": [
             {"role": "system", "content": system + "\n/no_think"},
             {"role": "user", "content": "/no_think\n" + prompt},
@@ -309,6 +404,7 @@ def polish_claude_api(prompt: str, system: str, cfg: dict, key: str) -> str:
     payload = {
         "model": model,
         "max_tokens": 8192,
+        "temperature": 0.0,
         "system": system,
         "messages": [{"role": "user", "content": prompt}],
     }
@@ -326,7 +422,7 @@ def polish_openai_api(prompt: str, system: str, cfg: dict, key: str) -> str:
     model = cfg.get("models", {}).get("gpt", "gpt-6.1-terra")
     payload = {
         "model": model,
-        "temperature": 0.2,
+        "temperature": 0.0,
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": prompt},
@@ -346,6 +442,7 @@ def polish_gemini_api(prompt: str, system: str, cfg: dict, key: str) -> str:
     payload = {
         "system_instruction": {"parts": [{"text": system}]},
         "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.0},
     }
     headers = {"Content-Type": "application/json"}
     result = _http_json(url, payload, headers)
@@ -458,46 +555,85 @@ def polish_text(raw_text: str, provider: Optional[str] = None) -> dict:
             "raw_used": True,
         }
 
-    prompt = _user_payload(text)
-    try:
-        out = _call_backend(wanted, auth_mode, prompt, SYSTEM_PROMPT, cfg)
+    system = polish_system_prompt(cfg)
+    include_headings = bool(cfg.get("include_headings", False))
+    chunks = _split_polish_chunks(text)
+    paragraphs: list[str] = []
+    headings: list[str] = []
+    used = wanted
+    fallback_notes: list[str] = []
+
+    def _plain_paras(out: str) -> list[str]:
         parsed = _parse_json_obj(out)
-        if not parsed:
-            # model may have returned plain text
-            paras = [p.strip() for p in out.split("\n") if p.strip()]
-            parsed = {"heading": "", "paragraphs": paras or [out.strip()]}
+        if parsed and (parsed.get("paragraphs") or parsed.get("heading") is not None):
+            paras = [str(p).strip() for p in (parsed.get("paragraphs") or []) if str(p).strip()]
+            heading = str(parsed.get("heading") or "").strip()
+            return paras or _fallback_paragraphs(out), heading
+        return _fallback_paragraphs(out), ""
+
+    def _run(prompt: str, provider: str, mode: str) -> str:
+        return _call_backend(provider, mode, prompt, system, cfg)
+
+    try:
+        for i, chunk in enumerate(chunks):
+            prompt = _user_payload(chunk)
+            out = _run(prompt, wanted, auth_mode)
+            paras, heading = _plain_paras(out)
+            polished = "\n".join(paras).strip() or (out or "").strip()
+            ok, reason = _polish_is_safe(chunk, polished)
+            if not ok:
+                polished = chunk.rstrip() + "〔待回聽〕"
+                paras = _fallback_paragraphs(polished)
+                fallback_notes.append(f"第{i+1}段校对未通过（{reason}），已回退原文并标〔待回聽〕")
+            paragraphs.extend(paras)
+            if include_headings and heading:
+                headings.append(heading)
         used = wanted
     except Exception as exc:
         if wanted != "local":
             try:
-                out = _call_backend("local", "login", prompt, SYSTEM_PROMPT, cfg)
-                parsed = _parse_json_obj(out) or {
-                    "heading": "",
-                    "paragraphs": [p.strip() for p in out.split("\n") if p.strip()],
-                }
+                paragraphs = []
+                headings = []
+                fallback_notes = []
+                for i, chunk in enumerate(chunks):
+                    prompt = _user_payload(chunk)
+                    out = _run(prompt, "local", "login")
+                    paras, heading = _plain_paras(out)
+                    polished = "\n".join(paras).strip() or (out or "").strip()
+                    ok, reason = _polish_is_safe(chunk, polished)
+                    if not ok:
+                        polished = chunk.rstrip() + "〔待回聽〕"
+                        paras = _fallback_paragraphs(polished)
+                        fallback_notes.append(f"第{i+1}段校对未通过（{reason}），已回退原文并标〔待回聽〕")
+                    paragraphs.extend(paras)
+                    if include_headings and heading:
+                        headings.append(heading)
                 used = "local"
                 note = f"原选 {wanted} 不可用（{_safe_err(exc)}），已改用本地千问修饰。"
             except Exception as exc2:
-                parsed = {"heading": "", "paragraphs": _fallback_paragraphs(text)}
+                paragraphs = _fallback_paragraphs(text)
                 used = "none"
                 note = f"修饰失败（{_safe_err(exc)}；本地亦失败：{_safe_err(exc2)}），已输出未修饰初稿。"
         else:
-            parsed = {"heading": "", "paragraphs": _fallback_paragraphs(text)}
+            paragraphs = _fallback_paragraphs(text)
             used = "none"
             note = f"本地千问修饰失败（{_safe_err(exc)}），已输出未修饰初稿。"
 
-    paragraphs = [str(p).strip() for p in (parsed.get("paragraphs") or []) if str(p).strip()]
     if not paragraphs:
         paragraphs = _fallback_paragraphs(text)
         if not note:
             note = "修饰结果为空，已回退到初稿。"
             used = "none"
+    if fallback_notes:
+        extra = "；".join(fallback_notes)
+        note = (note + "；" + extra).strip("；") if note else extra
     return {
-        "heading": str(parsed.get("heading") or "").strip(),
+        "heading": headings[0] if include_headings and headings else "",
         "paragraphs": paragraphs,
         "provider_used": used,
         "note": note,
         "raw_used": used == "none",
+        "lead_chars": len(lead_prompt(cfg)),
     }
 
 

@@ -86,6 +86,13 @@ function applySettings(state) {
   $$(`#auth-group input[value="${auth}"]`).forEach((el) => { el.checked = true; });
   $$(`#english-group input[value="${s.english_output || "bilingual"}"]`).forEach((el) => { el.checked = true; });
   $("#opt-appendix").checked = !!s.include_raw_appendix;
+  if ($("#opt-summary")) $("#opt-summary").checked = !!s.include_summary;
+  if ($("#opt-headings")) $("#opt-headings").checked = !!s.include_headings;
+  const leadBox = $("#lead-prompt");
+  if (leadBox && document.activeElement !== leadBox) {
+    leadBox.value = s.polish_lead_prompt || s.polish_lead_prompt_default || "";
+    leadBox.dataset.default = s.polish_lead_prompt_default || "";
+  }
   $("#template-name").textContent = s.template_display || "默认版式";
   const cloud = provider !== "local";
   $("#cloud-auth").classList.toggle("hidden", !cloud);
@@ -152,16 +159,27 @@ function bind() {
     el.addEventListener("change", () => { if (el.checked) call("set_lang", el.value); });
   });
 
-  const saveSettings = () => call("save_settings", {
+  const saveSettings = (extra) => call("save_settings", Object.assign({
     polish_provider: ($("#provider-group input:checked") || {}).value,
     auth_mode: ($("#auth-group input:checked") || {}).value,
     include_raw_appendix: $("#opt-appendix").checked,
+    include_summary: !!($("#opt-summary") && $("#opt-summary").checked),
+    include_headings: !!($("#opt-headings") && $("#opt-headings").checked),
+    polish_lead_prompt: ($("#lead-prompt") && $("#lead-prompt").value) || "",
     english_output: ($("#english-group input:checked") || {}).value,
-  });
+  }, extra || {}));
   $$("#provider-group input, #auth-group input, #english-group input").forEach((el) => {
     el.addEventListener("change", saveSettings);
   });
   $("#opt-appendix").addEventListener("change", saveSettings);
+  if ($("#opt-summary")) $("#opt-summary").addEventListener("change", saveSettings);
+  if ($("#opt-headings")) $("#opt-headings").addEventListener("change", saveSettings);
+  if ($("#btn-save-lead")) $("#btn-save-lead").addEventListener("click", () => saveSettings().then(() => toast("校对提示词已保存")));
+  if ($("#btn-reset-lead")) $("#btn-reset-lead").addEventListener("click", () => {
+    const box = $("#lead-prompt");
+    if (box) box.value = box.dataset.default || "";
+    saveSettings();
+  });
   $("#btn-login").addEventListener("click", () => {
     const provider = ($("#provider-group input:checked") || {}).value;
     call("start_login", provider);

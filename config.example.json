@@ -16,6 +16,9 @@
   "chunk_seconds": 480,
   "overlap_seconds": 4,
   "include_raw_appendix": true,
+  "include_summary": false,
+  "include_headings": false,
+  "polish_lead_prompt": "",
   "template_path": "",
   "english_output": "bilingual",
   "out_dir": ""

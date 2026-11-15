@@ -106,10 +106,22 @@
 
       <div class="card">
         <label class="check"><input type="checkbox" id="opt-appendix" /> 在文档末尾附上「附录：原始转录」</label>
+        <label class="check"><input type="checkbox" id="opt-summary" /> 另外生成「摘要」（默认关闭）</label>
+        <label class="check"><input type="checkbox" id="opt-headings" /> 允许模型加小节标题（默认关闭）</label>
         <p class="field-label tight">英文输出</p>
         <div class="radios" id="english-group">
           <label><input type="radio" name="english" value="bilingual" /> 中英对照</label>
           <label><input type="radio" name="english" value="zh" /> 仅中文</label>
+        </div>
+      </div>
+
+      <div class="card">
+        <p class="field-label">校对提示词</p>
+        <p class="help">这段话会放在修饰模型提示词的最前面，本地千问和云端模型都会先读到它。可修改，保存后下次转写生效。</p>
+        <textarea id="lead-prompt" rows="8" spellcheck="false"></textarea>
+        <div class="row" style="margin-top:10px">
+          <button type="button" class="btn primary" id="btn-save-lead">保存提示词</button>
+          <button type="button" class="btn" id="btn-reset-lead">恢复默认</button>
         </div>
       </div>
 
