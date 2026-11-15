@@ -35,6 +35,7 @@ DEFAULTS: dict[str, Any] = {
     "zh_asr_model": "buddhist",
     "zh_variant_normalization": True,
     "zh_asr_context_enabled": False,
+    "zh_asr_repetition_penalty": 1.0,
     "out_dir": "",
 }
 

@@ -7,6 +7,7 @@ import argparse
 import fcntl
 import hashlib
 import json
+import math
 import os
 import shutil
 import subprocess
@@ -274,12 +275,25 @@ def collapse_runaway_repeats(text: str, min_times: int = 6) -> tuple[str, int]:
     return out, runs
 
 
+def qwen_repetition_penalty(lang: Optional[str]) -> float:
+    """Use the measured Chinese default while preserving other language defaults."""
+    if lang not in ("zh", "Chinese"):
+        return 1.15
+    try:
+        penalty = float(load_config().get("zh_asr_repetition_penalty", 1.0))
+    except (TypeError, ValueError):
+        return 1.0
+    return penalty if math.isfinite(penalty) and penalty > 0.0 else 1.0
+
+
 def transcribe_qwen(
     wav: Path,
     lang: Optional[str],
-    repetition_penalty: float = 1.15,
+    repetition_penalty: Optional[float] = None,
     temperature: float = 0.0,
 ) -> str:
+    if repetition_penalty is None:
+        repetition_penalty = qwen_repetition_penalty(lang)
     model = load_qwen()
     hotwords, system_prompt = _qwen_bias()
     kwargs = {
@@ -322,7 +336,7 @@ def transcribe_chunk_with_guard(
         if lang == "bo":
             text = transcribe_tibetan(wav)
         else:
-            text = transcribe_qwen(wav, lang, repetition_penalty=1.15)
+            text = transcribe_qwen(wav, lang)
         found = find_runaway_repeat(text)
         if not found:
             return text
@@ -771,6 +785,16 @@ def transcribe_file(
     jid = job_id_for(src)
     job = jobs_dir() / jid
     raw_chunks = job / "raw"
+    if lang == "zh":
+        model_path = qwen_ft_path() if zh_asr_choice() == "buddhist" else None
+        model_path = model_path or resolve_hub_snapshot(QWEN_MODEL_ID)
+        weights = [
+            (p.name, p.stat().st_size, p.stat().st_mtime_ns, p.stat().st_ctime_ns)
+            for p in sorted(model_path.glob("*.safetensors"))
+        ]
+        profile = json.dumps([qwen_repetition_penalty(lang), str(model_path), weights])
+        profile_id = hashlib.sha256(profile.encode()).hexdigest()[:16]
+        raw_chunks = job / f"raw-r5-{profile_id}"
     wav_dir = job / "wav"
     raw_chunks.mkdir(parents=True, exist_ok=True)
     wav_dir.mkdir(parents=True, exist_ok=True)

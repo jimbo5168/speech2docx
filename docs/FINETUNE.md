@@ -59,3 +59,13 @@ Round 4 提示/分段逐项对照（同一原评分规则）：
 如需恢复原提示，可设为 `true`，词表仍由应用现有的可编辑「佛教词库.txt」补充。
 扩展短词表虽改善 held-out，但损害两讲回归，未采用；分段未更改，r3 权重未更改。
 这些分数比较使用相同的历史短片段，不冒充应用 480 秒长块的整讲端到端得分。
+
+### Round 5 decode measurements (2026-11-15)
+
+The original 169-cut / 167-passing evaluation, Chinese language, and old scoring rule reproduce 88.02% at repetition penalty 1.15. Penalties 1.0 / 1.05 / 1.1 score 92.01% / 91.85% / 90.55%. Doubling the original per-segment token budget leaves 88.02% unchanged with zero budget hits. At 1.0 the two fixed regression samples score 95.54% / 93.86% (previously 89.95% / 91.45%).
+
+Reference-free speech-density/end-probe omission QA, short-window re-decoding, and two repeated-phrase thresholds were measured separately. At penalty 1.15 omission QA scores 88.22%. At 1.0 omission/combined QA scores 92.00%, repetition QA 92.01%, and the more sensitive repetition/combined variants 91.97% / 91.96%. The app uses the cheaper plain 1.0 setting for Chinese. `zh_asr_repetition_penalty` can override this default without rewriting existing user settings. Other languages retain 1.15. Chinese raw-chunk caches use a new parameter/model-revision-specific namespace. The existing long-run repeat guard remains active.
+
+`eval_segments.py --repetition-penalty 1.0 --token-budget-multiplier 1` reproduces the accepted decoding parameters. Its defaults preserve the previous 1.15 scoring recipe, and its output includes token-budget hits and real-time factor. Term counts use the original un-normalized transcript strings, as in earlier rounds. Character deletion/insertion counts use the same full Levenshtein path (equal, substitution, deletion, insertion tie order).
+
+The experimental QA remains available through `eval_segments.py --qa-mode omission|repetition|combined|repetition_sensitive|combined_sensitive`. It strips `〔待回听〕` only from the scored hypothesis and reports markers per audio hour. The selected app default uses plain decoding.
