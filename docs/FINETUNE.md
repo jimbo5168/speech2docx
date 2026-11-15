@@ -25,3 +25,5 @@
 | Round 2 epoch 1 | 82.45% |
 | Round 2 epoch 2 | 83.39% |
 | Round 2 epoch 3 | 83.18% |
+| Round 3 epoch 1 | 88.02% |
+| Round 3 epoch 2 | 87.92% |

@@ -6,6 +6,7 @@ Usage: prep_segments.py NAME AUDIO REF_TXT OUTDIR
 Writes OUTDIR/NAME/seg_XXXX.wav and OUTDIR/NAME.jsonl
 """
 import difflib, json, os, re, subprocess, sys, time
+from train_lora import resource_guard
 from pathlib import Path
 
 os.environ.setdefault("HF_HUB_OFFLINE", "1")
@@ -91,6 +92,7 @@ def main():
     hyps = json.loads(hyp_cache.read_text()) if hyp_cache.exists() else {}
     t0 = time.time()
     for k, (s, e) in enumerate(segs):
+        resource_guard()
         key = f"{k:04d}"
         seg_wav = segdir / f"seg_{key}.wav"
         if not seg_wav.exists():

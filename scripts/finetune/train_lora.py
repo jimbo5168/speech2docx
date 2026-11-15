@@ -159,6 +159,7 @@ def main():
     def val_loss():
         inner.eval(); tot = 0.0
         for r in vrows:
+            resource_guard()
             ids, first, n, plen = build(inner, cache[r["id"]], r["text"])
             l = loss_fn(inner, ids, cache[r["id"]], first, n, plen); mx.eval(l); tot += l.item()
         inner.train(); return tot / max(1, len(vrows))
@@ -193,7 +194,17 @@ def main():
             print(f"  saved best (val {vl:.4f})", flush=True)
     json.dump({"base": BASE, "rank": a.rank, "alpha": a.alpha, "targets": TARGETS, "best_val": best},
               open(out / "adapter_config.json", "w"))
-    print("TRAIN_DONE", flush=True)
+    summary = {
+        "seconds": time.time() - t0,
+        "peak_memory_gb": mx.get_peak_memory() / 1e9,
+        "train_segments": len(rows),
+        "val_segments": len(vrows),
+        "epochs": a.epochs,
+        "seed": 0,
+        "feature_cache_on_disk": bool(a.feature_cache_dir),
+    }
+    (out / "training_summary.json").write_text(json.dumps(summary, indent=2))
+    print("TRAIN_DONE " + json.dumps(summary), flush=True)
 
 
 if __name__ == "__main__":

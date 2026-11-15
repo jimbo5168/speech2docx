@@ -8,6 +8,7 @@ os.environ.setdefault("HF_HUB_OFFLINE", "1")
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from eval_accuracy import score  # noqa
 from mlx_audio.stt import load
+from train_lora import resource_guard
 
 TERMS = ["论典", "不堕两边", "顺缘", "违缘", "出离心", "菩提心", "因明", "依止五火", "五部大论", "殊胜", "善根"]
 ap = argparse.ArgumentParser()
@@ -26,6 +27,7 @@ if a.system_prompt_file:
     kw["system_prompt"] = open(a.system_prompt_file).read().strip()
 t0 = time.time(); hyps = []
 for r in rows:
+    resource_guard()
     out = m.generate(r["audio"], max_tokens=int((r["end"] - r["start"]) * 10) + 40, **kw)
     hyps.append(cc((getattr(out, "text", "") or "").strip()))
 ref = "\n".join(r["text"] for r in rows); hyp = "\n".join(hyps)
