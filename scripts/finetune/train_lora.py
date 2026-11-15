@@ -139,9 +139,15 @@ def main():
     vrows = [json.loads(l) for l in open(a.val)]
     t0 = time.time()
     cache = DiskFeatures(a.feature_cache_dir) if a.feature_cache_dir else {}
+    cached_audio = {}
     for r in rows + vrows:
+        if cached_audio.get(r["id"]) == r["audio"]:
+            continue
         resource_guard()
-        f, n = audio_feats(inner, r["audio"]); mx.eval(f); cache[r["id"]] = f
+        f, n = audio_feats(inner, r["audio"])
+        mx.eval(f)
+        cache[r["id"]] = f
+        cached_audio[r["id"]] = r["audio"]
     print(f"cached {len(cache)} audio features in {time.time()-t0:.0f}s", flush=True)
 
     apply_lora(inner, a.rank, a.alpha, 0.05)
