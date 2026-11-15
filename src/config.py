@@ -32,6 +32,7 @@ DEFAULTS: dict[str, Any] = {
     "polish_lead_prompt": "",
     "template_path": "",
     "english_output": "bilingual",
+    "zh_asr_model": "buddhist",
     "out_dir": "",
 }
 

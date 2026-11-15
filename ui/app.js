@@ -85,6 +85,7 @@ function applySettings(state) {
   $$(`#provider-group input[value="${provider}"]`).forEach((el) => { el.checked = true; });
   $$(`#auth-group input[value="${auth}"]`).forEach((el) => { el.checked = true; });
   $$(`#english-group input[value="${s.english_output || "bilingual"}"]`).forEach((el) => { el.checked = true; });
+  $$(`#zhasr-group input[value="${s.zh_asr_model || "buddhist"}"]`).forEach((el) => { el.checked = true; });
   $("#opt-appendix").checked = !!s.include_raw_appendix;
   if ($("#opt-summary")) $("#opt-summary").checked = !!s.include_summary;
   if ($("#opt-headings")) $("#opt-headings").checked = !!s.include_headings;
@@ -167,8 +168,9 @@ function bind() {
     include_headings: !!($("#opt-headings") && $("#opt-headings").checked),
     polish_lead_prompt: ($("#lead-prompt") && $("#lead-prompt").value) || "",
     english_output: ($("#english-group input:checked") || {}).value,
+    zh_asr_model: ($("#zhasr-group input:checked") || {}).value,
   }, extra || {}));
-  $$("#provider-group input, #auth-group input, #english-group input").forEach((el) => {
+  $$("#provider-group input, #auth-group input, #english-group input, #zhasr-group input").forEach((el) => {
     el.addEventListener("change", saveSettings);
   });
   $("#opt-appendix").addEventListener("change", saveSettings);

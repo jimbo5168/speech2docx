@@ -204,6 +204,7 @@ class AppState:
                 "polish_lead_prompt": (cfg.get("polish_lead_prompt") or "").strip() or DEFAULT_LEAD_PROMPT,
                 "polish_lead_prompt_default": DEFAULT_LEAD_PROMPT,
                 "english_output": cfg.get("english_output") or "bilingual",
+                "zh_asr_model": cfg.get("zh_asr_model") or "buddhist",
                 "template_path": template,
                 "template_display": Path(template).name if template else "默认版式",
                 "login_status": {
@@ -462,6 +463,8 @@ class JsApi:
         if "polish_lead_prompt" in payload:
             lead = str(payload.get("polish_lead_prompt") or "")
             cfg["polish_lead_prompt"] = lead if lead.strip() else DEFAULT_LEAD_PROMPT
+        if payload.get("zh_asr_model") in {"buddhist", "base"}:
+            cfg["zh_asr_model"] = payload["zh_asr_model"]
         if payload.get("english_output") in {"bilingual", "zh"}:
             cfg["english_output"] = payload["english_output"]
         if provider in CLOUD_PROVIDERS and payload.get("auth_mode") in {"login", "api_key"}:

@@ -116,6 +116,15 @@
       </div>
 
       <div class="card">
+        <p class="field-label">中文识别模型</p>
+        <p class="help">佛学微调版用堪布讲课录音和听打稿训练过，佛学术语更准；如果效果不好，可以换回原版。</p>
+        <div class="radios" id="zhasr-group">
+          <label><input type="radio" name="zhasr" value="buddhist" /> 佛学微调版（默认）</label>
+          <label><input type="radio" name="zhasr" value="base" /> 原版 Qwen3-ASR</label>
+        </div>
+      </div>
+
+      <div class="card">
         <p class="field-label">校对提示词</p>
         <p class="help">这段话会放在修饰模型提示词的最前面，本地千问和云端模型都会先读到它。可修改，保存后下次转写生效。</p>
         <textarea id="lead-prompt" rows="8" spellcheck="false"></textarea>

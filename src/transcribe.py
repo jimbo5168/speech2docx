@@ -51,6 +51,8 @@ from template import write_from_template
 TZ = ZoneInfo("America/Los_Angeles")
 LOCK_PATH = logs_dir() / "transcribe.lock"
 QWEN_MODEL_ID = "mlx-community/Qwen3-ASR-1.7B-8bit"
+# Buddhist-lecture LoRA fine-tune (merged, 8-bit), built by scripts/finetune/.
+QWEN_FT_DIRNAME = "qwen3-asr-1.7b-buddhist-8bit"
 TIBETAN_MODEL_ID = "tenzin/whisper-small-tibetan-ct2"
 AUDIO_EXTS = MEDIA_EXTS  # audio + video; video soundtrack is extracted first
 LANG_TO_QWEN = {
@@ -140,12 +142,31 @@ def to_simplified(text: str) -> str:
         return text
 
 
+def qwen_ft_path() -> Optional[Path]:
+    from paths import asr_home
+    p = Path(asr_home()) / "models" / QWEN_FT_DIRNAME
+    return p if (p / "model.safetensors").exists() else None
+
+
+def zh_asr_choice() -> str:
+    """'buddhist' (fine-tuned, default) or 'base'. Falls back to base if missing."""
+    try:
+        from config import load_config
+        choice = load_config().get("zh_asr_model", "buddhist")
+    except Exception:
+        choice = "buddhist"
+    if choice == "buddhist" and qwen_ft_path() is None:
+        return "base"
+    return "base" if choice == "base" else "buddhist"
+
+
 def load_qwen():
     global _qwen_model
     if _qwen_model is None:
         os.environ.setdefault("HF_HUB_OFFLINE", "1")
         from mlx_audio.stt import load
-        path = resolve_hub_snapshot(QWEN_MODEL_ID)
+        path = qwen_ft_path() if zh_asr_choice() == "buddhist" else None
+        path = path or resolve_hub_snapshot(QWEN_MODEL_ID)
         log(f"Loading Qwen3-ASR from {path}")
         t0 = time.perf_counter()
         _qwen_model = load(str(path))
@@ -177,6 +198,8 @@ ASR_PRIORITY_TERMS = [
 def asr_model_label(lang: str) -> str:
     if lang == "bo":
         return "Tibetan Whisper small（tenzin/whisper-small-tibetan-ct2，本地）"
+    if zh_asr_choice() == "buddhist":
+        return "Qwen3-ASR 1.7B 佛学微调版（8-bit，本地）"
     return "Qwen3-ASR 1.7B-8bit（mlx-community，本地）"
 
 
@@ -412,6 +435,8 @@ def infer_script(text: str) -> str:
 def job_id_for(src: Path) -> str:
     st = src.stat()
     raw = f"{src.resolve()}|{st.st_size}|{int(st.st_mtime)}"
+    if zh_asr_choice() == "buddhist":  # don't reuse chunks recognised by another ASR model
+        raw += "|asr=buddhist"
     return hashlib.sha1(raw.encode()).hexdigest()[:12]
 
 
