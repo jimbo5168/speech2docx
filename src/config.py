@@ -33,6 +33,8 @@ DEFAULTS: dict[str, Any] = {
     "template_path": "",
     "english_output": "bilingual",
     "zh_asr_model": "buddhist",
+    "zh_variant_normalization": True,
+    "zh_asr_context_enabled": False,
     "out_dir": "",
 }
 

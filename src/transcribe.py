@@ -24,6 +24,7 @@ if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 
 from config import load_config
+from zh_normalization import canonicalize_variants
 from glossary import as_hotwords, as_prompt_block, ensure_glossary
 from notify import notify
 from media import MEDIA_EXTS, extract_audio, is_video, media_duration
@@ -137,7 +138,10 @@ def to_simplified(text: str) -> str:
             from opencc import OpenCC
             _opencc = OpenCC("t2s")
         protected, held = protect_review_markers(text)
-        return restore_review_markers(_opencc.convert(protected), held)
+        simplified = _opencc.convert(protected)
+        if load_config().get("zh_variant_normalization", True):
+            simplified = canonicalize_variants(simplified)
+        return restore_review_markers(simplified, held)
     except Exception:
         return text
 
@@ -204,6 +208,11 @@ def asr_model_label(lang: str) -> str:
 
 
 def _qwen_bias() -> tuple[list[str], str]:
+    # Round 4: the legacy long prompt regressed held-out and both sanity samples.
+    # Keep it opt-in, with the existing editable glossary, rather than silently
+    # biasing every decode. No prompt is the measured default for the r3 model.
+    if not load_config().get("zh_asr_context_enabled", False):
+        return [], ""
     terms: list[str] = []
     seen: set[str] = set()
     for term in ASR_PRIORITY_TERMS + as_hotwords(400):

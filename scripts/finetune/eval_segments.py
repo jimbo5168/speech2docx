@@ -14,6 +14,8 @@ TERMS = ["论典", "不堕两边", "顺缘", "违缘", "出离心", "菩提心",
 ap = argparse.ArgumentParser()
 ap.add_argument("model"); ap.add_argument("test"); ap.add_argument("out")
 ap.add_argument("--max-end", type=float, default=0); ap.add_argument("--system-prompt-file", default="")
+ap.add_argument("--normalize-variants", action="store_true",
+                help="Add variant-normalized metrics while retaining original accuracy/edits")
 a = ap.parse_args()
 rows = [json.loads(l) for l in open(a.test)]
 rows = [r for r in rows if r.get("keep", True) and (not a.max_end or r["end"] <= a.max_end + 1)]
@@ -37,5 +39,10 @@ terms = {t: f"{hyp.count(t)}/{ref.count(t)}" for t in TERMS if ref.count(t)}
 res = {"model": a.model, "segments": len(rows), "audio_min": round(sum(r['end']-r['start'] for r in rows)/60, 1),
        "accuracy": round(s["accuracy"] * 100, 2), "edits": s["edits"], "ref_chars": s["ref_chars"],
        "terms(hyp/ref)": terms, "secs": round(time.time() - t0)}
+if a.normalize_variants:
+    variant = score(ref, hyp, normalize_variants=True)
+    res["variant_accuracy"] = round(variant["accuracy"] * 100, 2)
+    res["variant_edits"] = variant["edits"]
+    res["variant_ref_chars"] = variant["ref_chars"]
 Path(a.out + ".json").write_text(json.dumps(res, ensure_ascii=False, indent=1))
 print(json.dumps(res, ensure_ascii=False))

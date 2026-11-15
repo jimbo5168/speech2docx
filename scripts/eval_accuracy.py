@@ -14,6 +14,9 @@ import subprocess
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
+from zh_normalization import canonicalize_variants
+
 SKIP_LINE_RE = re.compile(
     r"^(摘要|听打稿|聽打稿|来源：|來源：|校对说明|校對說明|附录[:：]|附錄[:：]"
     r"|识别：|識別：|修饰：|修飾：|说明：|說明：|转写时间|轉寫時間)"
@@ -79,9 +82,15 @@ def levenshtein(a: str, b: str) -> int:
     return prev[-1]
 
 
-def score(reference: str, hypothesis: str) -> dict:
+def score(reference: str, hypothesis: str, *, normalize_variants: bool = False) -> dict:
     ref = normalize(reference)
     hyp = normalize(hypothesis)
+    if normalize_variants:
+        from opencc import OpenCC
+
+        convert = OpenCC("t2s").convert
+        ref = canonicalize_variants(convert(ref))
+        hyp = canonicalize_variants(convert(hyp))
     dist = levenshtein(ref, hyp)
     n = len(ref)
     cer = dist / n if n else (0.0 if not hyp else 1.0)
@@ -109,6 +118,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--ref", required=True, help="人工听打稿（.doc/.docx/.txt）")
     parser.add_argument("--hyp", action="append", required=True, help="识别或校对稿，可多次：标签=路径")
     parser.add_argument("--prefix-from", default="", help="按这份稿的正文字数截取参考稿开头（用于只评前几分钟）")
+    parser.add_argument("--normalize-variants", action="store_true",
+                        help="同时报告简繁及叫作/叫做异写归一分数；旧规则分数始终保留")
     args = parser.parse_args(argv)
 
     ref_text = extract_text(Path(args.ref))
@@ -144,6 +155,12 @@ def main(argv: list[str] | None = None) -> int:
             f"{label}: 一致率 {result['accuracy']*100:.2f}%  "
             f"（编辑 {result['edits']} / 参考 {result['ref_chars']}，稿件 {result['hyp_chars']}）"
         )
+        if args.normalize_variants:
+            normalized = score(ref_text, hyp_text, normalize_variants=True)
+            print(
+                f"{label} [异写归一]: 一致率 {normalized['accuracy']*100:.2f}%  "
+                f"（编辑 {normalized['edits']} / 参考 {normalized['ref_chars']}）"
+            )
     return 0
 
 
