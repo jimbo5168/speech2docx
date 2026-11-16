@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #ifndef PATH_MAX
 #define PATH_MAX 4096
@@ -37,11 +38,36 @@ int main(int argc, char **argv) {
         return 2;
     }
 
+    /* Direct CLI launches need the same runtime home as gui-launch. */
+    const char *asr_home = getenv("ASR_HOME");
+    if (asr_home == NULL || asr_home[0] == '\0') {
+        const char *user_home = getenv("HOME");
+        char default_home[PATH_MAX];
+        if (user_home == NULL || snprintf(default_home, sizeof(default_home), "%s/ASR", user_home) >= sizeof(default_home)) {
+            fprintf(stderr, "Cannot determine ASR_HOME\n");
+            return 1;
+        }
+        setenv("ASR_HOME", default_home, 1);
+    }
+
     const char *home = getenv("ASR_HOME");
     if (home && home[0]) {
         char venv[PATH_MAX];
         snprintf(venv, sizeof(venv), "%s/.venv", home);
         setenv("VIRTUAL_ENV", venv, 0);
+    }
+
+    /* Python libraries spawn helpers using sys.executable -c/-m. */
+    if (strcmp(argv[1], "-c") == 0 || strcmp(argv[1], "-m") == 0) {
+        char python[PATH_MAX];
+        int length = snprintf(python, sizeof(python), "%s/.venv/bin/python", home);
+        if (length < 0 || (size_t)length >= sizeof(python)) {
+            return 1;
+        }
+        argv[0] = python;
+        execv(python, argv);
+        perror("Cannot launch Python helper");
+        return 1;
     }
 
     PyStatus status;
