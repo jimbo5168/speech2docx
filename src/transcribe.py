@@ -9,6 +9,8 @@ import hashlib
 import json
 import math
 import os
+import re
+from difflib import SequenceMatcher
 import shutil
 import subprocess
 import sys
@@ -31,6 +33,7 @@ from notify import notify
 from media import MEDIA_EXTS, extract_audio, is_video, media_duration
 from subtitles import (
     download_url,
+    export_cues_to_srt,
     find_subtitles,
     format_proofread_note,
     is_media_url,
@@ -321,6 +324,109 @@ def transcribe_qwen(
     return to_simplified(text)
 
 
+# Round 7, approved 2026-11-16. See ~/ASR/codex_round7.md and
+# ~/ASR/train/round7/install_gate.json. r3 weights are retained.
+_ROUND7_SKIP_LINE_RE = re.compile('^(摘要|听打稿|聽打稿|来源：|來源：|校对说明|校對說明|附录[:：]|附錄[:：]|识别：|識別：|修饰：|修飾：|说明：|說明：|转写时间|轉寫時間)')
+
+_ROUND7_PUNCT_RE = re.compile('[\\s\\u3000-\\u303f\\uff00-\\uff0f\\uff1a-\\uff20\\uff3b-\\uff40\\uff5b-\\uff65\\u2000-\\u206f\\u2e00-\\u2e7f!\\"#$%&\'()*+,\\-./:;<=>?@\\[\\\\\\]^_`{|}~，。！？、；：「」『』（）【】《》—…·]+')
+
+def _round7_body_text(text: str) -> str:
+    lines = []
+    for raw in (text or '').splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        if _ROUND7_SKIP_LINE_RE.match(line):
+            continue
+        if line.startswith('以下为识别模型的原文'):
+            break
+        lines.append(line)
+    return '\n'.join(lines)
+
+def _round7_normalize(text: str) -> str:
+    return _ROUND7_PUNCT_RE.sub('', _round7_body_text(text))
+
+def _round7_repeat_spans(s):
+    spans = []
+    for size in range(1, 25):
+        i = 0
+        while i + size * 2 <= len(s):
+            unit = s[i:i + size]
+            n = 1
+            while s[i + n * size:i + (n + 1) * size] == unit:
+                n += 1
+            if n >= 2:
+                spans.append((i, i + n * size, size, n, unit))
+                i += n * size
+            else:
+                i += 1
+    return spans
+
+def _round7_select(old, retry):
+    a, b = (_round7_normalize(old), _round7_normalize(retry))
+    if not a or not 1 <= len(b) / len(a) <= 1.15:
+        return (old, [])
+    ops = SequenceMatcher(None, a, b, autojunk=False).get_opcodes()
+    adds = []
+    for k, (tag, i, j, u, v) in enumerate(ops):
+        if tag != 'insert' or not 1 <= v - u <= 8 or k == 0 or (k == len(ops) - 1):
+            continue
+        prev, nex = (ops[k - 1], ops[k + 1])
+        if prev[0] != 'equal' or nex[0] != 'equal' or prev[2] - prev[1] < 6 or (nex[2] - nex[1] < 6):
+            continue
+        if _round7_repeat_spans(b[max(0, u - 8):min(len(b), v + 8)]):
+            continue
+        pos = next((p for p in range(len(old) + 1) if len(_round7_normalize(old[:p])) == i), None)
+        if pos is not None:
+            adds.append((pos, b[u:v]))
+    result = old
+    for pos, txt in reversed(adds):
+        result = result[:pos] + txt + result[pos:]
+    assert all((tag in ('equal', 'insert') for tag, *_ in SequenceMatcher(None, old, result, autojunk=False).get_opcodes()))
+    return (result, adds)
+
+
+def recover_round7_omissions(wav: Path, wav_dir: Path, duration: float, text: str, index: int) -> str:
+    """Apply the frozen reference-free, insertion-only Round 7 retry rule."""
+    if duration <= 0:
+        return text
+    cps = len(_round7_normalize(text)) / duration
+    if cps > 2.3295141722123502 and duration < 27.51499999999976:
+        return text
+    try:
+        from opencc import OpenCC
+        converter = OpenCC('t2s').convert
+        model = load_qwen()
+        parts = []
+        for part in range(2):
+            if shutil.disk_usage(asr_home()).free < 50 * 1024 ** 3:
+                raise RuntimeError('Round7 disk below 50 GiB')
+            while True:
+                pressure = subprocess.check_output(['memory_pressure'], text=True)
+                free = int(re.search(r'free percentage: (\d+)', pressure)[1])
+                if free >= 15:
+                    break
+                log(f'Round7 waiting for memory, free={free}%')
+                time.sleep(60)
+            half = wav_dir / f'{index:03d}-round7-{part}.wav'
+            try:
+                subprocess.run([FFMPEG, '-nostdin', '-y', '-loglevel', 'error',
+                                '-ss', str(duration * part / 2), '-i', str(wav),
+                                '-t', str(duration / 2), '-ar', '16000', '-ac', '1', str(half)], check=True)
+                result = model.generate(str(half), language='Chinese', repetition_penalty=1.0,
+                                        max_tokens=int(duration / 2 * 10) + 40, verbose=False)
+                parts.append(converter(result.text.strip()))
+            finally:
+                half.unlink(missing_ok=True)
+        recovered, additions = _round7_select(text, ''.join(parts))
+        if additions:
+            log(f'Round7 inserted {sum(len(s) for _, s in additions)} chars in chunk {index + 1}')
+        return recovered
+    except Exception as error:
+        log(f'Round7 retry failed, preserving initial output: {error}')
+        return text
+
+
 def transcribe_chunk_with_guard(
     media_src: Path,
     wav_dir: Path,
@@ -337,6 +443,8 @@ def transcribe_chunk_with_guard(
             text = transcribe_tibetan(wav)
         else:
             text = transcribe_qwen(wav, lang)
+        if lang == "zh" and zh_asr_choice() == "buddhist":
+            text = recover_round7_omissions(wav, wav_dir, dur, text, index)
         found = find_runaway_repeat(text)
         if not found:
             return text
@@ -784,6 +892,46 @@ def transcribe_file(
     overlap_s = float(cfg.get("overlap_seconds") or 4)
     jid = job_id_for(src)
     job = jobs_dir() / jid
+    # Resolve text subtitles before audio extraction, model lookup, or chunking.
+    fast_started = time.perf_counter()
+    extras = list(sidecar_dirs or []) + [src.parent]
+    try:
+        track = find_subtitles(src, job, extra_dirs=extras, prefer="zh")
+    except Exception as exc:
+        log(f"SUBTITLE lookup failed, using ASR: {exc}")
+        track = None
+    track = track or subtitle_track
+    if track and track.cues:
+        emit_progress(on_progress, "write", 96, "直接采用原字幕，正在生成文档…")
+        note = "本稿直接采用原字幕（信任原字幕），未经转写与校对"
+        sections = [{"heading": "", "paragraphs": [c.text for c in track.cues]}]
+        duration = max(c.end for c in track.cues)
+        dest = unique_path(out_dir / f"{stem}.docx")
+        while dest.with_suffix(".srt").exists():
+            dest = unique_path(dest.with_name(dest.stem + "-字幕.docx"))
+        docx_path = write_docx(
+            dest, title=stem, source_name=source_name,
+            sections=sections, summary="", note=note,
+            lang="bo" if lang == "bo" else "zh", duration=duration,
+            polish_label="未经校对", asr_label="原字幕直出",
+        )
+        srt_path = export_cues_to_srt(track.cues, docx_path.with_suffix(".srt"))
+        elapsed = time.perf_counter() - fast_started
+        log(f"SUBTITLE FAST PATH source={track.source} cues={len(track.cues)} "
+            f"elapsed={elapsed:.4f}s -> {docx_path.name}, {srt_path.name}")
+        emit_progress(on_progress, "done", 100, "完成（信任原字幕）")
+        if do_notify:
+            notify("为我闻思", f"已直接采用原字幕生成「{docx_path.name}」")
+        if open_docx:
+            subprocess.run(["/usr/bin/open", str(docx_path)], check=False)
+        return {
+            "source": str(src), "docx": str(docx_path), "srt": str(srt_path),
+            "raw": "", "text": "\n".join(c.text for c in track.cues),
+            "polished_sections": sections, "summary": "", "note": note,
+            "duration": duration, "elapsed": elapsed,
+            "rtf_x": duration / elapsed if elapsed else 0.0,
+            "lang": lang, "provider_used": "none", "subtitle_fastpath": True,
+        }
     raw_chunks = job / "raw"
     if lang == "zh":
         model_path = qwen_ft_path() if zh_asr_choice() == "buddhist" else None
@@ -855,9 +1003,13 @@ def transcribe_file(
     raw_out.write_text(raw_full, encoding="utf-8")
     log(f"RAW saved {raw_out} chars={len(raw_full)}")
 
-    extras = list(sidecar_dirs or [])
-    extras.append(src.parent)
-    track = subtitle_track or find_subtitles(src, job, extra_dirs=extras, prefer=lang if lang in {"zh", "en", "bo"} else "zh")
+    # Retry subtitle discovery after ASR, preserving the existing proofreading fallback.
+    if not track or not track.cues:
+        try:
+            track = subtitle_track or find_subtitles(src, job, extra_dirs=extras, prefer=lang)
+        except Exception as exc:
+            log(f"SUBTITLE retry failed, preserving ASR: {exc}")
+            track = None
     proof_stats: dict = {}
     highlight_phrases: list[str] = []
     working = list(texts)

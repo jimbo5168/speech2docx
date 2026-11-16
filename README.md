@@ -14,6 +14,8 @@ Audio is transcribed only on the machine. The first-run chooser preselects Local
 
 ## 功能 Features
 
+- **原字幕直出**：优先采用同名 SRT/VTT/ASS/SSA，其次提取内嵌文字字幕，直接生成同名 SRT 和当前模板的 Word，注明「本稿直接采用原字幕（信任原字幕），未经转写与校对」。跳过语音识别和润色。无可用文字字幕时沿用语音识别，不处理图像字幕或烧录字幕。
+
 - **中文识别**：千问 Qwen3-ASR 1.7B（MLX，适合 Apple Silicon）
 - **藏文识别**：`tenzin/whisper-small-tibetan-ct2`（faster-whisper）
 - **长录音**：自动按约 8 分钟分片，可转 2 小时以上，支持中断后续传

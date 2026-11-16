@@ -158,7 +158,10 @@ def sidecar_candidates(src: Path, extra_dirs: list[Path] | None = None) -> list[
 
 def load_sidecar(src: Path, extra_dirs: list[Path] | None = None) -> Optional[SubtitleTrack]:
     for path in sidecar_candidates(src, extra_dirs):
-        cues = parse_subtitles(path)
+        try:
+            cues = parse_subtitles(path)
+        except (OSError, ValueError):
+            continue
         if cues:
             lang = ""
             low = path.name.lower()
@@ -176,7 +179,7 @@ def list_embedded_subtitle_streams(src: Path) -> list[dict[str, Any]]:
             [FFPROBE, "-v", "error", "-select_streams", "s",
              "-show_entries", "stream=index,codec_name:stream_tags=language,title,handler_name",
              "-of", "json", str(src)],
-            stderr=subprocess.STDOUT, text=True,
+            stderr=subprocess.STDOUT, text=True, timeout=5,
         )
         data = json.loads(out or "{}")
         return list(data.get("streams") or [])
@@ -204,28 +207,51 @@ def extract_embedded_subtitles(src: Path, dest: Path, prefer: str = "zh") -> Opt
     streams = sorted(streams, key=score)
     dest = Path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    last_err = None
     for stream in streams:
+        if not is_text_subtitle_codec(stream.get("codec_name", "")):
+            continue
         idx = stream.get("index")
-        for fmt, ext in (("srt", ".srt"), ("webvtt", ".vtt"), ("ass", ".ass")):
-            out = dest.with_suffix(ext)
+        out = dest.with_suffix(".srt")
+        try:
             proc = subprocess.run(
-                [FFMPEG, "-y", "-i", str(src), "-map", f"0:{idx}", "-c:s", fmt, str(out)],
-                capture_output=True, text=True,
+                [FFMPEG, "-nostdin", "-y", "-loglevel", "error", "-i", str(src),
+                 "-map", f"0:{idx}", "-c:s", "srt", str(out)],
+                capture_output=True, text=True, timeout=15,
             )
-            if proc.returncode == 0 and out.exists() and out.stat().st_size > 0:
+            if proc.returncode == 0 and out.exists():
                 cues = parse_subtitles(out)
                 if cues:
                     lang = _lang_of_stream(stream) or prefer
-                    return SubtitleTrack(
-                        cues=cues,
-                        source=f"视频内嵌字幕（{lang or 'unknown'}）",
-                        trust="embedded",
-                        path=out,
-                        language=lang,
-                    )
-            last_err = proc.stderr
+                    return SubtitleTrack(cues, f"视频内嵌字幕（{lang}）", "embedded", out, lang)
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            continue
     return None
+
+
+def is_text_subtitle_codec(codec: str) -> bool:
+    # FFmpeg text decoders can export SRT. Reject bitmap and unknown tracks.
+    return codec.lower() in {
+        "mov_text", "subrip", "srt", "ass", "ssa", "webvtt", "text",
+        "microdvd", "mpl2", "jacosub", "pjs", "realtext", "sami", "stl",
+        "subviewer", "subviewer1", "vplayer", "scc", "eia_608", "ttml",
+        "hdmv_text_subtitle", "arib_caption", "libaribb24", "libaribcaption",
+    }
+
+
+def export_cues_to_srt(cues: list[Cue], dest: Path) -> Path:
+    def stamp(seconds: float) -> str:
+        millis = max(0, round(seconds * 1000))
+        seconds, ms = divmod(millis, 1000)
+        minutes, sec = divmod(seconds, 60)
+        hours, minute = divmod(minutes, 60)
+        return f"{hours:02d}:{minute:02d}:{sec:02d},{ms:03d}"
+
+    blocks = [f"{i}\n{stamp(c.start)} --> {stamp(c.end)}\n{c.text.strip()}\n"
+              for i, c in enumerate(cues, 1)]
+    dest = Path(dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text("\n".join(blocks), encoding="utf-8")
+    return dest
 
 
 def find_yt_dlp() -> str:
@@ -318,10 +344,9 @@ def find_subtitles(
     sidecar = load_sidecar(src, extra_dirs)
     if sidecar:
         return sidecar
-    if src.suffix.lower() in {".mp4", ".mov", ".mkv", ".webm", ".m4v", ".avi", ".mpeg", ".mpg"}:
-        embedded = extract_embedded_subtitles(src, job_dir / "embedded-subs", prefer=prefer)
-        if embedded:
-            return embedded
+    embedded = extract_embedded_subtitles(src, job_dir / "embedded-subs", prefer=prefer)
+    if embedded:
+        return embedded
     return None
 
 
