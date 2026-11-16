@@ -269,25 +269,40 @@ def download_url(url: str, dest_dir: Path) -> dict[str, Any]:
     dest_dir.mkdir(parents=True, exist_ok=True)
     ytdlp = find_yt_dlp()
     outtmpl = str(dest_dir / "%(id)s.%(ext)s")
-    # Official + auto subs; convert to srt. Also keep a video/audio file we can transcribe.
-    cmd = [
-        ytdlp,
-        "--no-progress",
-        "--newline",
-        "-f", "bv*+ba/b/ba",
-        "--merge-output-format", "mp4",
-        "-o", outtmpl,
-        "--write-subs",
-        "--write-auto-subs",
-        "--sub-langs", "zh,zh-Hans,zh-Hant,en",
-        "--convert-subs", "srt",
-        "--no-playlist",
-        "--js-runtimes", "node",
-        url,
-    ]
+    # Inspect metadata first. Subtitle filenames do not encode provenance.
+    metadata_cmd = [ytdlp, "--skip-download", "--write-info-json", "--no-playlist",
+                    "--js-runtimes", "node", "-o", outtmpl, url]
+    proc = subprocess.run(metadata_cmd, capture_output=True, text=True, timeout=600)
+    if proc.returncode != 0:
+        raise RuntimeError("读取视频信息失败：" + (proc.stderr or proc.stdout or "")[-800:])
+    infos = sorted(dest_dir.glob("*.info.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    if not infos:
+        raise RuntimeError("下载器没有生成视频信息。")
+    info = json.loads(infos[0].read_text(encoding="utf-8"))
+    def preferred(tracks):
+        languages = [lang for lang in tracks if lang.startswith("zh") or lang == "en"]
+        return sorted(languages, key=lambda lang: (lang != "zh", not lang.startswith("zh"), lang))
+    human = preferred(info.get("subtitles") or {})
+    automatic = preferred(info.get("automatic_captions") or {})
+    trust = "official" if human else "auto"
+    languages = human or automatic
+    # Separate folders prevent stale auto files from becoming trusted sidecars.
+    sub_dir = dest_dir / trust
+    sub_dir.mkdir(parents=True, exist_ok=True)
+    cmd = [ytdlp, "--no-progress", "--newline", "-f", "bv*+ba/b/ba",
+           "--merge-output-format", "mp4", "-o", outtmpl, "--no-playlist",
+           "--js-runtimes", "node", url]
     proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     if proc.returncode != 0:
         raise RuntimeError("下载失败：" + (proc.stderr or proc.stdout or "")[-800:])
+    if languages:
+        cmd = [ytdlp, "--skip-download", "--no-playlist", "--js-runtimes", "node",
+               "--write-subs" if human else "--write-auto-subs",
+               "--sub-langs", languages[0], "--convert-subs", "srt",
+               "-o", str(sub_dir / "%(id)s.%(ext)s"), url]
+        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        if proc.returncode != 0:
+            raise RuntimeError("下载字幕失败：" + (proc.stderr or proc.stdout or "")[-800:])
     media = None
     for ext in (".mp4", ".mkv", ".webm", ".m4a", ".mp3", ".wav", ".opus"):
         cands = sorted(dest_dir.glob(f"*{ext}"), key=lambda p: p.stat().st_mtime, reverse=True)
@@ -296,43 +311,15 @@ def download_url(url: str, dest_dir: Path) -> dict[str, Any]:
             break
     if media is None:
         raise RuntimeError("下载完成但没有找到音视频文件。")
-    # Gather srt files and classify official vs auto
-    official: list[Path] = []
-    auto: list[Path] = []
-    for srt in dest_dir.glob("*.srt"):
-        name = srt.name.lower()
-        if ".auto." in name or name.endswith(".auto.srt") or "orig" in name and "auto" in name:
-            auto.append(srt)
-        else:
-            # yt-dlp auto often looks like VIDEOID.zh.srt vs VIDEOID.zh-orig.srt?
-            # Auto-generated typically has language then no extra, but also *-auto-*.
-            # Heuristic: files containing 'auto' are auto; others official if --write-subs succeeded.
-            if "auto" in name:
-                auto.append(srt)
-            else:
-                official.append(srt)
-    # If both exist for same lang, official wins. If only auto, use auto with lower trust.
-    def pick(paths: list[Path], prefer_zh: bool = True) -> Optional[Path]:
-        if not paths:
-            return None
-        def sc(p: Path) -> tuple:
-            n = p.name.lower()
-            zh = 0 if any(x in n for x in (".zh", "chi", "hans", "hant", "cn")) else 1
-            return (zh if prefer_zh else 1 - zh, len(n), n)
-        return sorted(paths, key=sc)[0]
-
     track = None
-    chosen = pick(official) or pick(auto)
-    trust = "official" if chosen in official else "auto"
-    if chosen:
+    candidates = sorted(sub_dir.glob("*.srt"))
+    if candidates:
+        chosen = candidates[0]
         cues = parse_subtitles(chosen)
         if cues:
-            lang = "zh" if any(x in chosen.name.lower() for x in (".zh", "chi", "hans", "hant")) else "en"
             label = "YouTube 官方字幕" if trust == "official" else "YouTube 自动字幕（可信度较低）"
-            track = SubtitleTrack(cues=cues, source=f"{label}（{chosen.name}）", trust=trust, path=chosen, language=lang)
-    title = media.stem
-    # Try to get title from info if present
-    return {"media": media, "track": track, "title": title, "dir": dest_dir}
+            track = SubtitleTrack(cues, label, trust, chosen, languages[0])
+    return {"media": media, "track": track, "title": info.get("title") or media.stem, "dir": dest_dir}
 
 
 def find_subtitles(

@@ -115,6 +115,18 @@ class FastPathTests(unittest.TestCase):
         self.assertEqual(written.sections[0].header.paragraphs[0].text, 'CUSTOM TEMPLATE')
         self.assertIn(NOTE, '\n'.join(p.text for p in written.paragraphs))
 
+    def test_auto_url_track_uses_asr(self):
+        track = subs.SubtitleTrack(subs.parse_subtitles(self.srt), 'YouTube 自动字幕', 'auto')
+        with patch.object(app, 'qwen_ft_path', return_value=self.root), \
+             patch.object(app, 'zh_asr_choice', return_value='buddhist'), \
+             patch.object(app, 'transcribe_chunk_with_guard', return_value='模拟识别。') as asr, \
+             patch.object(app, 'proofread_chunks', return_value=([], {})), \
+             patch.object(app, 'polish_text', return_value={'provider_used': 'none', 'paragraphs': ['模拟识别。']}):
+            result = app.transcribe_file(self.media, lang='zh', out_dir=self.root / 'out', subtitle_track=track)
+        self.assertTrue(asr.called)
+        self.assertNotIn('subtitle_fastpath', result)
+        self.assertNotIn(NOTE, '\n'.join(p.text for p in Document(result['docx']).paragraphs))
+
     def test_bitmap_codecs(self):
         for codec in ('hdmv_pgs_subtitle', 'pgs', 'dvdsub', 'dvd_subtitle', 'dvb_subtitle', 'xsub'):
             self.assertFalse(subs.is_text_subtitle_codec(codec))

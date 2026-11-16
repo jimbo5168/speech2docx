@@ -62,10 +62,10 @@ for ext in mp4 mov mkv webm m4v avi mpeg mpg 3gp wmv flv ts mts; do
 done
 
 # Version shown in Finder Get Info
-/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 0.4.1" "$INFO" 2>/dev/null \
-  || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 0.4.1" "$INFO"
-/usr/libexec/PlistBuddy -c "Set :CFBundleVersion 0.4.1" "$INFO" 2>/dev/null \
-  || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string 0.4.1" "$INFO"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString 0.4.2" "$INFO" 2>/dev/null \
+  || /usr/libexec/PlistBuddy -c "Add :CFBundleShortVersionString string 0.4.2" "$INFO"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion 0.4.2" "$INFO" 2>/dev/null \
+  || /usr/libexec/PlistBuddy -c "Add :CFBundleVersion string 0.4.2" "$INFO"
 
 # Native Python host so the menu bar and process name are 为我闻思, not Python.
 VPY="${ASR_HOME}/.venv/bin/python"

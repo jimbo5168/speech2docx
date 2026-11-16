@@ -66,10 +66,6 @@ def display_title(stem: str) -> str:
 
 def infer_speaker(title: str, sections: list[dict], source_name: str = "") -> str:
     parts: list[str] = [title or "", source_name or ""]
-    for sec in sections[:3]:
-        parts.append(str(sec.get("heading") or ""))
-        for para in (sec.get("paragraphs") or [])[:2]:
-            parts.append(str(para)[:400])
     hay = "\n".join(parts)
     match = _SPEAKER_RE.search(hay)
     if not match:
@@ -160,14 +156,13 @@ def _title_lines(title: str) -> list[str]:
         return ["讲课记录"]
     if len(title) <= 10:
         return [title]
-    for sep in ("——", "—", "–", "：", ":", "（", "("):
+    for sep in ("——", "—", "–", "：", ":", "｜", " | "):
         i = title.find(sep)
         if 2 <= i <= 12:
             left, right = title[:i].strip(), title[i + len(sep):].strip(" —–-")
             if left and right:
                 return [left, right]
-    mid = (len(title) + 1) // 2
-    return [title[:mid], title[mid:]]
+    return [title]
 
 
 def _add_title_block(

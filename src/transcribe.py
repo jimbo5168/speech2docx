@@ -873,6 +873,8 @@ def transcribe_file(
     open_docx: bool = False,
     sidecar_dirs: Optional[list[Path]] = None,
     subtitle_track: Optional[SubtitleTrack] = None,
+    source_label: Optional[str] = None,
+    document_title: Optional[str] = None,
     on_progress=None,
 ) -> dict:
     ensure_glossary()
@@ -885,7 +887,7 @@ def transcribe_file(
     out_dir = Path(out_dir).expanduser() if out_dir else default_out_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = output_stem or src.stem
-    source_name = (stem + src.suffix) if output_stem else src.name
+    source_name = source_label or ((stem + src.suffix) if output_stem else src.name)
     lang = detect_lang(src, lang)
     cfg = load_config()
     chunk_s = float(cfg.get("chunk_seconds") or 480)
@@ -896,12 +898,12 @@ def transcribe_file(
     fast_started = time.perf_counter()
     extras = list(sidecar_dirs or []) + [src.parent]
     try:
-        track = find_subtitles(src, job, extra_dirs=extras, prefer="zh")
+        track = None if source_label else find_subtitles(src, job, extra_dirs=extras, prefer="zh")
     except Exception as exc:
         log(f"SUBTITLE lookup failed, using ASR: {exc}")
         track = None
-    track = track or subtitle_track
-    if track and track.cues:
+    track = subtitle_track or track
+    if track and track.cues and track.trust in {"sidecar", "embedded", "official"}:
         emit_progress(on_progress, "write", 96, "直接采用原字幕，正在生成文档…")
         note = "本稿直接采用原字幕（信任原字幕），未经转写与校对"
         sections = [{"heading": "", "paragraphs": [c.text for c in track.cues]}]
@@ -910,7 +912,7 @@ def transcribe_file(
         while dest.with_suffix(".srt").exists():
             dest = unique_path(dest.with_name(dest.stem + "-字幕.docx"))
         docx_path = write_docx(
-            dest, title=stem, source_name=source_name,
+            dest, title=document_title or stem, source_name=source_name,
             sections=sections, summary="", note=note,
             lang="bo" if lang == "bo" else "zh", duration=duration,
             polish_label="未经校对", asr_label="原字幕直出",
@@ -1006,7 +1008,7 @@ def transcribe_file(
     # Retry subtitle discovery after ASR, preserving the existing proofreading fallback.
     if not track or not track.cues:
         try:
-            track = subtitle_track or find_subtitles(src, job, extra_dirs=extras, prefer=lang)
+            track = subtitle_track or (None if source_label else find_subtitles(src, job, extra_dirs=extras, prefer=lang))
         except Exception as exc:
             log(f"SUBTITLE retry failed, preserving ASR: {exc}")
             track = None
@@ -1101,7 +1103,7 @@ def transcribe_file(
     emit_progress(on_progress, "write", 96, "正在生成 Word 文档…")
     docx_path = write_docx(
         out_dir / f"{stem}.docx",
-        title=stem,
+        title=document_title or stem,
         source_name=source_name,
         sections=sections,
         summary=summary,
@@ -1176,6 +1178,8 @@ def _transcribe_arg(
             open_docx=open_docx,
             sidecar_dirs=[dest],
             subtitle_track=info.get("track"),
+            source_label=f"{info.get('title') or media.stem}  {value}",
+            document_title=info.get("title") or media.stem,
             on_progress=on_progress,
         )
     path = Path(value).expanduser()
