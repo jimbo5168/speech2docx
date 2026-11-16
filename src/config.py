@@ -26,7 +26,7 @@ DEFAULTS: dict[str, Any] = {
     "lms_url": "http://127.0.0.1:1234/v1",
     "chunk_seconds": 480,
     "overlap_seconds": 4,
-    "include_raw_appendix": True,
+    "include_raw_appendix": False,
     "include_summary": False,
     "include_headings": False,
     "polish_lead_prompt": "",

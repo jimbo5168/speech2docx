@@ -198,7 +198,7 @@ def _add_title_block(
     _set_run_font(p.add_run("听打稿"), SPEAKER_FONT, 12)
 
     asr_bit = f"    识别：{asr_label}" if asr_label else ""
-    meta = f"来源：{source_name}    时长：{duration_label}    转写时间：{when}{asr_bit}    修饰：{polish_label}"
+    meta = f"来源：{source_name}"
     p = _add_styled_paragraph(doc, STYLE_PLAIN)
     _align(p, "center")
     _spacing(p, line=280, before=80, after=80)

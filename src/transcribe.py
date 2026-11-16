@@ -790,7 +790,7 @@ def _write_docx_plain(
     when = datetime.now(TZ).strftime("%Y-%m-%d %H:%M %Z")
     meta = doc.add_paragraph()
     asr_bit = f"    识别：{asr_label}" if asr_label else ""
-    r = meta.add_run(f"来源：{source_name}    时长：{format_duration(duration)}    转写时间：{when}{asr_bit}    修饰：{polish_label}")
+    r = meta.add_run(f"来源：{source_name}")
     set_run_font(r, "zh", 10)
     r.italic = True
     r.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
@@ -1098,7 +1098,7 @@ def transcribe_file(
 
     label_map = {"local": "本地千问", "claude": "Claude", "gpt": "GPT", "gemini": "Gemini", "none": "未修饰"}
     note = "；".join(dict.fromkeys(notes))
-    include_raw = bool(cfg.get("include_raw_appendix", True))
+    include_raw = bool(cfg.get("include_raw_appendix", False))
     asr_label = asr_model_label(lang)
     emit_progress(on_progress, "write", 96, "正在生成 Word 文档…")
     docx_path = write_docx(
