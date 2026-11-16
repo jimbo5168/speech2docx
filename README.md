@@ -12,11 +12,38 @@ Local speech-to-text for macOS on Apple Silicon. Drop an MP3, M4A, WAV, or a vid
 
 Audio is transcribed only on the machine. The first-run chooser preselects Local (LM Studio Qwen) so you can check accuracy before switching to a cloud model. By default the Word file also ends with an appendix, 附录：原始转录, containing the unpolished ASR text (turn this off in Settings). English audio is transcribed, optionally proofread against English subtitles, then translated into Simplified Chinese with the Buddhist glossary (bodhicitta → 菩提心). The Word file is a two-column English/Chinese layout by default. Documents use a bundled typography template (A5, header banner, footer page numbers, 华文行楷 titles and 宋体 body). Choose your own template in Settings if you like. Optional polishing can use Local, or a signed-in Claude / ChatGPT / Gemini subscription, or an API key.
 
+## 评测结果 Evaluation results
+
+当前默认中文识别模型是 **r3**（Qwen3-ASR-1.7B 佛学 LoRA，MLX 8-bit），外加 `repetition_penalty=1.0`（rp1_tok1）解码和第七轮漏词补救（对可能漏字的片段切开重识别）。  
+留出讲「佛教徒的生活模式」：严格分 92.05%，调整分 **97.56%**。四讲调整平均 **97.44%**。  
+模型文件 SHA256：`0f7b16c8adde1b941624d97281afd08d2b7e10e38ecb9e01aabc878060a91085`。
+
+完整的模型清单、分轮测试、对照表、计分规则和公开基准来源，见 [docs/ASR评测记录.md](docs/ASR评测记录.md)。下面是精简对照（严格分是对照听打稿的原规则；调整分是后来按「真逐字」规则重算的，两种口径不要直接相减）。
+
+| # | 模型 / 轮次 | 测试集 | 严格分 | 调整分 | 采用？ |
+| --- | --- | --- | ---: | ---: | --- |
+| 1 | 原版 Qwen3-ASR-1.7B 8-bit | 生活模式（留出） | 76.41% | — | 否（已被 r1/r3 替换） |
+| 2 | r1 佛学 LoRA 8-bit（3 讲、约 3.4 小时） | 生活模式（留出） | 87.33% | — | 曾采用，后被 r3 替换 |
+| 3 | r2（第一、二册，新增约 0.6 小时） | 生活模式（留出） | 83.39% | — | 否（低于 r1） |
+| 4 | **r3** 佛学 LoRA 8-bit（65 课、约 103 小时） | 生活模式（留出） | 88.02% | — | 是（权重仍用此版） |
+| 5 | r3 + rp1_tok1（第五轮，只改解码） | 生活模式（留出） | 92.01% | 97.52% | 是（解码参数） |
+| 5 | 同上 | 四讲平均 | — | 97.42% | 是 |
+| 6 | r3 术语交叉核对 | 四讲 | 与 r3 相同 | 与 r3 相同 | 否（0 处替换） |
+| 7 | r3 的 4-bit 量化 | 四讲平均 | — | 94.31% | 否（低于 8-bit 3.11 分） |
+| 8 | **r3 + rp1_tok1 + 第七轮补字（当前默认）** | 生活模式（留出） | **92.05%** | **97.56%** | **是** |
+| 8 | 同上 | 四讲平均 | — | **97.44%** | **是** |
+| 9 | FireRed2-AED | 生活模式（留出） | 75.99%（beam 3）/ 76.07%（beam 5） | — | 否 |
+| 10 | MiMo-V2.5 8-bit | 生活模式（留出） | 77.90% | — | 否 |
+| 11 | FireRedASR2-LLM | 四讲调整平均 | — | 89.07% | 否 |
+| 12 | Step-Audio 2 mini | 语加持前 7 段（提前停止） | — | 约 61% | 否 |
+
+「—」表示当时没有按该口径公布分数。无法从对话或工作记录恢复的细节，在评测记录里标为「原始报告已删除」。
+
 ## 功能 Features
 
 - **原字幕直出**：优先采用同名 SRT/VTT/ASS/SSA，其次提取内嵌文字字幕，直接生成同名 SRT 和当前模板的 Word，注明「本稿直接采用原字幕（信任原字幕），未经转写与校对」。跳过语音识别和润色。无可用文字字幕时沿用语音识别，不处理图像字幕或烧录字幕。
 
-- **中文识别**：千问 Qwen3-ASR 1.7B（MLX，适合 Apple Silicon）
+- **中文识别**：默认佛学微调版 r3（Qwen3-ASR-1.7B LoRA，MLX 8-bit）。留出讲调整分 97.56%，四讲调整平均 97.44%。详见 [评测记录](docs/ASR评测记录.md)
 - **藏文识别**：`tenzin/whisper-small-tibetan-ct2`（faster-whisper）
 - **长录音**：自动按约 8 分钟分片，可转 2 小时以上，支持中断后续传
 - **视频输入**：可把 MP4 / MOV / MKV / WEBM 等视频拖到应用、桌面文件夹或命令行，会先抽出音轨再转写
@@ -140,7 +167,7 @@ speech2docx/           本仓库
   launchd/             监视器模板
   templates/default.docx  版式模板（无讲课正文）
   ui/                    应用窗口界面
-  docs/                  使用截图
+  docs/                  使用截图、ASR 评测记录
   install.sh
 ```
 
