@@ -1,6 +1,6 @@
 {
   "configured": false,
-  "polish_provider": "local",
+  "polish_provider": "none",
   "auth_mode": {
     "claude": "login",
     "gpt": "login",

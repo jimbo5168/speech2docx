@@ -11,7 +11,7 @@ from paths import config_path
 
 DEFAULTS: dict[str, Any] = {
     "configured": False,
-    "polish_provider": "local",
+    "polish_provider": "none",
     "auth_mode": {
         "claude": "login",
         "gpt": "login",
@@ -39,10 +39,11 @@ DEFAULTS: dict[str, Any] = {
     "out_dir": "",
 }
 
-PROVIDERS = ("local", "claude", "gpt", "gemini")
+PROVIDERS = ("none", "local", "claude", "gpt", "gemini")
 CLOUD_PROVIDERS = ("claude", "gpt", "gemini")
 PROVIDER_LABELS = {
-    "local": "本地（LM Studio 千问）",
+    "none": "本地（直接转写）",
+    "local": "千问润色（可选）",
     "claude": "Claude",
     "gpt": "GPT",
     "gemini": "Gemini",
@@ -68,6 +69,9 @@ def load_config() -> dict[str, Any]:
                     data["auth_mode"].update(user["auth_mode"])
         except Exception:
             pass
+    # Old local defaults require a new explicit opt-in.
+    if data.get("polish_provider") == "local" and not data.get("local_polish_opt_in", False):
+        data["polish_provider"] = "none"
     return data
 
 

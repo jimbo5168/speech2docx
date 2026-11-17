@@ -7,7 +7,7 @@ from typing import Optional
 
 from config import PROVIDER_LABELS, PROVIDERS, load_config, save_config
 from glossary import ensure_glossary
-from polish import cli_login_status, find_claude, find_codex, find_gemini, keychain_set, login_command
+from polish import local_qwen_available, cli_login_status, find_claude, find_codex, find_gemini, keychain_set, login_command
 
 
 def _osascript(script: str, timeout: int = 300) -> str:
@@ -23,11 +23,11 @@ def _osascript(script: str, timeout: int = 300) -> str:
 
 
 def choose_provider(prompt: str = "请选择用来修饰文字稿的模型：") -> Optional[str]:
-    labels = [PROVIDER_LABELS[p] for p in PROVIDERS]
+    labels = [PROVIDER_LABELS[p] for p in PROVIDERS if p != "local" or local_qwen_available(load_config())]
     listed = ", ".join(f'"{x}"' for x in labels)
     script = f'''
 set opts to {{{listed}}}
-set picked to choose from list opts with prompt "{prompt}" default items {{"{PROVIDER_LABELS['local']}"}} OK button name "确定" cancel button name "取消"
+set picked to choose from list opts with prompt "{prompt}" default items {{"{PROVIDER_LABELS['none']}"}} OK button name "确定" cancel button name "取消"
 if picked is false then return ""
 return item 1 of picked
 '''
@@ -119,14 +119,14 @@ def first_run_if_needed() -> None:
     cfg = load_config()
     if cfg.get("configured"):
         return
-    cfg["polish_provider"] = cfg.get("polish_provider") or "local"
+    cfg["polish_provider"] = cfg.get("polish_provider") or "none"
     cfg["configured"] = True
     save_config(cfg)
 
 
 def show_current() -> str:
     cfg = load_config()
-    p = cfg.get("polish_provider", "local")
+    p = cfg.get("polish_provider", "none")
     mode = (cfg.get("auth_mode") or {}).get(p, "")
     models = cfg.get("models") or {}
     st = cli_login_status()
@@ -248,6 +248,7 @@ return item 1 of picked
             if picked:
                 cfg = load_config()
                 cfg["polish_provider"] = picked
+                cfg["local_polish_opt_in"] = picked == "local"
                 cfg["configured"] = True
                 if picked in {"claude", "gpt", "gemini"}:
                     mode = _choose_auth_mode(picked)

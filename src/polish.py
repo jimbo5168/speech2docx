@@ -353,16 +353,24 @@ def _http_json(url: str, payload: dict, headers: dict, timeout: int = 180) -> di
         return json.loads(resp.read().decode("utf-8"))
 
 
+def local_qwen_available(cfg: dict) -> bool:
+    """Read-only probe; never start a server or load/unload a model."""
+    try:
+        base = cfg.get("lms_url", "http://127.0.0.1:1234/v1").rstrip("/")
+        url = base.removesuffix("/v1") + "/api/v0/models"
+        with urllib.request.urlopen(url, timeout=0.35) as response:
+            models = json.loads(response.read(262144).decode("utf-8")).get("data", [])
+        wanted = cfg.get("models", {}).get("local", "qwen/qwen3.6-35b-a3b")
+        return any(m.get("id") == wanted and m.get("state") == "loaded" and "qwen" in wanted.lower() for m in models)
+    except Exception:
+        return False
+
+
 def polish_local(prompt: str, system: str, cfg: dict) -> str:
     url = cfg.get("lms_url", "http://127.0.0.1:1234/v1").rstrip("/") + "/chat/completions"
     model = cfg.get("models", {}).get("local", "qwen/qwen3.6-35b-a3b")
-    # Try to start the server if needed (no-op if already running)
-    lms = shutil.which("lms") or str(Path.home() / ".lmstudio/bin/lms")
-    if Path(lms).exists():
-        try:
-            subprocess.run([lms, "server", "start"], capture_output=True, timeout=20)
-        except Exception:
-            pass
+    if not local_qwen_available(cfg):
+        raise RuntimeError("润色暂不可用，已保留原文")
     body = {
         "model": model,
         "temperature": 0.0,
@@ -382,21 +390,11 @@ def polish_local(prompt: str, system: str, cfg: dict) -> str:
         body.update(extra)
     body["max_tokens"] = 8192
     headers = {"Content-Type": "application/json"}
-    last_err = None
-    for attempt in range(2):
-        try:
-            result = _http_json(url, body, headers, timeout=900)
-            text = _assistant_text(result)
-            if not text:
-                raise RuntimeError("模型返回了空内容")
-            return text
-        except Exception as exc:
-            last_err = exc
-            if attempt == 0:
-                time.sleep(2)
-                continue
-            raise
-    raise last_err  # pragma: no cover
+    result = _http_json(url, body, headers, timeout=30)
+    text = _assistant_text(result)
+    if not text:
+        raise RuntimeError("模型返回了空内容")
+    return text
 
 
 def polish_claude_api(prompt: str, system: str, cfg: dict, key: str) -> str:
@@ -539,9 +537,9 @@ def _call_backend(provider: str, auth_mode: str, prompt: str, system: str, cfg: 
 def polish_text(raw_text: str, provider: Optional[str] = None) -> dict:
     """Return {paragraphs, heading, provider_used, note, raw_used}."""
     cfg = load_config()
-    wanted = (provider or cfg.get("polish_provider") or "local").lower()
+    wanted = (provider or cfg.get("polish_provider") or "none").lower()
     if wanted not in {"local", "claude", "gpt", "gemini", "none"}:
-        wanted = "local"
+        wanted = "none"
     auth_mode = (cfg.get("auth_mode") or {}).get(wanted, "login")
     note = ""
     used = wanted
@@ -617,7 +615,7 @@ def polish_text(raw_text: str, provider: Optional[str] = None) -> dict:
         else:
             paragraphs = _fallback_paragraphs(text)
             used = "none"
-            note = f"本地千问修饰失败（{_safe_err(exc)}），已输出未修饰初稿。"
+            note = "润色暂不可用，已保留未润色文稿。"
 
     if not paragraphs:
         paragraphs = _fallback_paragraphs(text)
@@ -692,11 +690,13 @@ def translate_english(
     Returns {pairs:[{en,zh}], title_zh, heading_zh, provider_used, note}.
     """
     cfg = load_config()
-    wanted = (provider or cfg.get("polish_provider") or "local").lower()
-    if wanted not in {"local", "claude", "gpt", "gemini"}:
-        wanted = "local"
+    wanted = (provider or cfg.get("polish_provider") or "none").lower()
+    if wanted not in {"local", "claude", "gpt", "gemini", "none"}:
+        wanted = "none"
     auth_mode = (cfg.get("auth_mode") or {}).get(wanted, "login")
     paras = [str(p).strip() for p in paragraphs if str(p).strip()]
+    if wanted == "none":
+        return {"pairs": [{"en": p, "zh": ""} for p in paras], "title_zh": "", "heading_zh": "", "provider_used": "none", "note": "未翻译"}
     if not paras:
         return {"pairs": [], "title_zh": "", "heading_zh": "", "provider_used": "none", "note": "没有可翻译的英文"}
 

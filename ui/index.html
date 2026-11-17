@@ -79,13 +79,15 @@
       <section id="panel-settings">
       <div class="card">
         <p class="field-label">修饰模型</p>
-        <p class="help">音频一律在本机识别。只有转好的文字才可能送到你选的云端模型。</p>
+        <p class="help">选本地直接按继续即可，无需安装任何软件。音频一律在本机识别。只有转好的文字才可能送到你选的云端模型。</p>
         <div class="radios stack" id="provider-group" role="group" aria-label="修饰模型">
-          <label><input type="radio" name="provider" value="local" /> 本地千问（推荐）</label>
+          <label><input type="radio" name="provider" value="none" /> 本地（直接转写，推荐）</label>
+          <label><input type="radio" name="provider" value="local" disabled /> 千问润色（可选）</label>
           <label><input type="radio" name="provider" value="claude" /> Claude</label>
           <label><input type="radio" name="provider" value="gpt" /> GPT</label>
           <label><input type="radio" name="provider" value="gemini" /> Gemini</label>
         </div>
+        <p class="help" id="local-polish-note">润色需要 LM Studio，可不用</p>
         <div id="cloud-auth" class="auth hidden">
           <p class="field-label">云端方式</p>
           <div class="radios" id="auth-group" role="group" aria-label="云端认证方式">
@@ -126,7 +128,7 @@
 
       <div class="card">
         <p class="field-label">校对提示词</p>
-        <p class="help">这段话会放在修饰模型提示词的最前面，本地千问和云端模型都会先读到它。可修改，保存后下次转写生效。</p>
+        <p class="help">这段话会放在修饰模型提示词的最前面，可选的千问润色和云端模型都会先读到它。可修改，保存后下次转写生效。</p>
         <textarea aria-label="校对提示词" id="lead-prompt" rows="8" spellcheck="false"></textarea>
         <div class="row" style="margin-top:10px">
           <button type="button" class="btn primary" id="btn-save-lead">保存提示词</button>
@@ -152,10 +154,11 @@
     </section>
     </dialog>
     <dialog id="welcome-dialog" aria-labelledby="welcome-title">
-      <div class="welcome-mark" aria-hidden="true">闻</div><p class="eyebrow">欢迎使用为我闻思</p><h2 id="welcome-title">选择文字修饰方式</h2>
+      <div class="welcome-mark" aria-hidden="true">闻</div><p class="eyebrow">欢迎使用为我闻思</p><h2 id="welcome-title">选择转写方式</h2>
       <p class="help">音频始终在本机识别。修饰会整理分段、修正用词，让文稿更易阅读。</p>
+      <p class="help">选本地直接按继续即可，无需安装任何软件。</p>
       <fieldset class="welcome-options"><legend class="sr-only">修饰模型</legend>
-        <label><input type="radio" name="welcome-provider" value="local" checked><span><strong>本地千问</strong><small>推荐 · 文字留在本机，需在 LM Studio 载入千问模型</small></span></label>
+        <label><input type="radio" name="welcome-provider" value="none" checked><span><strong>本地</strong><small>推荐 · 文字留在本机，无需安装任何软件</small></span></label>
         <label><input type="radio" name="welcome-provider" value="claude"><span><strong>Claude</strong><small>使用已有订阅或 API 密钥</small></span></label>
         <label><input type="radio" name="welcome-provider" value="gpt"><span><strong>GPT</strong><small>使用已有订阅或 API 密钥</small></span></label>
         <label><input type="radio" name="welcome-provider" value="gemini"><span><strong>Gemini</strong><small>使用已有订阅或 API 密钥</small></span></label>

@@ -896,6 +896,7 @@ def transcribe_file(
     source_name = source_label or ((stem + src.suffix) if output_stem else src.name)
     lang = detect_lang(src, lang)
     cfg = load_config()
+    polish = polish or cfg.get("polish_provider") or "none"
     chunk_s = float(cfg.get("chunk_seconds") or 480)
     overlap_s = float(cfg.get("overlap_seconds") or 4)
     jid = job_id_for(src)

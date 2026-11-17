@@ -177,7 +177,10 @@ function renderQueue(state) {
 
 function applySettings(state) {
   const s = state.settings || {};
-  const provider = s.polish_provider || "local";
+  const provider = s.polish_provider || "none";
+  const localOption = $('#provider-group input[value="local"]');
+  localOption.disabled = !s.local_polish_available;
+  $('#local-polish-note').textContent = s.local_polish_available ? "千问已就绪，可按需开启润色。" : "润色需要 LM Studio，可不用";
   const auth = (s.auth_mode || {})[provider] || "login";
   $$(`#provider-group input[value="${provider}"]`).forEach((el) => { el.checked = true; });
   $$(`#auth-group input[value="${auth}"]`).forEach((el) => { el.checked = true; });
@@ -192,7 +195,7 @@ function applySettings(state) {
     leadBox.dataset.default = s.polish_lead_prompt_default || "";
   }
   $("#template-name").textContent = s.template_display || "默认版式";
-  const cloud = provider !== "local";
+  const cloud = ["claude", "gpt", "gemini"].includes(provider);
   $("#cloud-auth").classList.toggle("hidden", !cloud);
   $("#key-row").classList.toggle("hidden", !cloud || auth !== "api_key");
   const info = (s.login_status || {})[provider] || {};
@@ -325,7 +328,7 @@ function bind() {
     if (!result) return;
     try { localStorage.setItem("wwws-welcome-seen", "1"); } catch (_) {}
     $("#welcome-dialog").close();
-    if (provider !== "local") $("#settings-dialog").showModal();
+    if (["claude", "gpt", "gemini"].includes(provider)) $("#settings-dialog").showModal();
     openModelDownload();
   });
 

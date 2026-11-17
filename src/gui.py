@@ -31,7 +31,7 @@ from config import (
 from glossary import ensure_glossary
 from media import MEDIA_EXTS
 from paths import asr_home, default_out_dir
-from polish import DEFAULT_LEAD_PROMPT, cli_login_status, keychain_set, login_command
+from polish import local_qwen_available, DEFAULT_LEAD_PROMPT, cli_login_status, keychain_set, login_command
 from settings import first_run_if_needed
 from model_download import Downloader
 from subtitles import is_media_url
@@ -179,12 +179,24 @@ class AppState:
         self.jobs: list[dict[str, Any]] = []
         self.busy = False
         self.lang = "zh"
+        self.local_polish_available = False
+        self._polish_probe_busy = False
+        self._polish_probe_at = 0.0
         cfg = load_config()
         out = str(cfg.get("out_dir") or "").strip()
         self.out_dir = Path(out).expanduser() if out else default_out_dir()
 
     def snapshot(self) -> dict[str, Any]:
         cfg = load_config()
+        if not self._polish_probe_busy and time.monotonic() - self._polish_probe_at > 5:
+            self._polish_probe_busy = True
+            def probe():
+                try:
+                    self.local_polish_available = local_qwen_available(cfg)
+                finally:
+                    self._polish_probe_at = time.monotonic()
+                    self._polish_probe_busy = False
+            threading.Thread(target=probe, daemon=True).start()
         status = cli_login_status()
         with self.lock:
             jobs = list(self.jobs)
@@ -198,7 +210,8 @@ class AppState:
             "out_dir": str(out_dir),
             "out_dir_display": display_path(out_dir),
             "settings": {
-                "polish_provider": cfg.get("polish_provider", "local"),
+                "polish_provider": cfg.get("polish_provider", "none"),
+                "local_polish_available": self.local_polish_available,
                 "auth_mode": cfg.get("auth_mode") or {},
                 "include_raw_appendix": bool(cfg.get("include_raw_appendix", True)),
                 "include_summary": bool(cfg.get("include_summary", False)),
@@ -483,8 +496,11 @@ class JsApi:
 
     def save_settings(self, payload: dict[str, Any]) -> dict[str, Any]:
         cfg = load_config()
-        provider = str(payload.get("polish_provider") or cfg.get("polish_provider") or "local")
-        if provider in {"local", "claude", "gpt", "gemini"}:
+        provider = str(payload.get("polish_provider") or cfg.get("polish_provider") or "none")
+        if provider in {"none", "local", "claude", "gpt", "gemini"}:
+            if provider == "local" and not STATE.local_polish_available:
+                provider = "none"
+            cfg["local_polish_opt_in"] = provider == "local"
             cfg["polish_provider"] = provider
         if "include_raw_appendix" in payload:
             cfg["include_raw_appendix"] = bool(payload.get("include_raw_appendix"))
