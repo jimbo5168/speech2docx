@@ -1,22 +1,41 @@
-# LinkedIn draft — local Chinese ASR fine-tune (unpublished)
+# LinkedIn draft (unpublished, review before posting)
 
-Status: draft only. Do not post until you review and publish it yourself.
+Fine-tuning a local Chinese speech-to-text model for Tibetan Buddhist education (non-profit project)
 
----
+I volunteer with a non-profit Tibetan Buddhist education community. Hundreds of hours of recorded Chinese lectures need accurate, word-for-word transcripts so students can study them. Off-the-shelf speech recognition kept getting Buddhist terms wrong, so I built a free, fully local tool on my Mac mini (Apple Silicon, 64 GB) that turns lecture audio or video into a formatted Word transcript. No audio ever leaves the machine.
 
-I spent a few days on my Mac mini (Apple Silicon, 64 GB) building and measuring a local speech-to-text model for long Chinese lectures with specialized Buddhist vocabulary.
+What I did
+• Base model: Qwen3-ASR-1.7B, run with MLX in 8-bit on Apple Silicon
+• Fine-tuned it on-device with LoRA on 65 lectures (about 103 hours of audio)
+• Tuned decoding (repetition penalty) and added a conservative re-decode step that recovers dropped words
+• Benchmarked other Chinese open-source speech models and a 4-bit build on the same lectures
+• Always scored on a 68-minute lecture that was never used in training, to check generalization
+• Added a fast path: when a video already has text subtitles, the tool exports them in under a second instead of re-transcribing
 
-The starting point was Qwen3-ASR-1.7B (MLX 8-bit). On a held-out lecture that was never used in training (佛教徒的生活模式, 68 minutes), strict word-level accuracy against human transcripts was 76.41%.
+Results (held-out lecture, strict word accuracy vs. human transcript)
+1. Base Qwen3-ASR-1.7B: 76.41%
+2. Fine-tune round 1 (3 lectures, 3.4 h): 87.33%  (+10.9 points)
+3. Fine-tune round 2 (more, different data): 83.39%  (rejected)
+4. Fine-tune round 3 (65 lectures, 103 h): 88.02%  (+11.6 points)
+5. Round 3 + decoding fix: 92.01%
+6. Round 3 + decoding fix + word-recovery step (current): 92.05%  (+15.6 points over base)
 
-I then fine-tuned it with LoRA, entirely on-device:
+Verbatim-adjusted score of the current model (sentence-final particles not counted as errors)
+• Held-out lecture: 97.56%
+• Average across four lectures: 97.44%
 
-- Round 1: 3 lectures, ~3.4 hours of audio → 87.33% strict, same held-out set.
-- Round 3 (the installed weights, “r3”): 65 lectures, ~103 hours → 88.02% strict. Adding ~30× more similar data after round 1 only gained 0.7 points, so more of the same data was not the answer.
-- A data-expansion round in between actually fell to 83.39% and was discarded.
-- The next real gain came from decoding, not from a new model: lowering the repetition penalty stopped the model from dropping words. Held-out strict accuracy rose to 92.01%, then 92.05% after a conservative re-decode that only fills likely omissions.
+Alternatives tested and not adopted (four-lecture adjusted score)
+• FireRedASR2-LLM: 89.07%
+• 4-bit build of my model: 94.31%
+• Step-Audio 2 mini: stopped early at about 61% (heavy insertions)
+• FireRed2-AED and MiMo-V2.5: about 76% and 77.90% strict on the held-out lecture
 
-We also rescore on a verbatim-adjusted basis: keep what the speaker actually said, and do not treat omitted sentence-final particles (or meaningless 的/了) as errors. On that scale, the current default — r3 + the new decoding rules — is 97.56% on the held-out lecture and 97.44% across four lectures. That 97% figure is not the same yardstick as the original 76.41%, and I do not report it as a like-for-like jump.
+What I learned
+• Adding about 30 times more similar data only gained 0.7 points; the biggest jump after fine-tuning came from fixing decoding, not from a bigger model.
+• Bigger is not better: several larger models scored below my 1.7B fine-tune on this domain.
+• A held-out test set and a clearly defined scoring rule mattered more than any single model choice.
 
-Other Chinese-team models were tested on the same lectures and not installed: FireRed2-AED ~76%, MiMo-V2.5 77.90%, FireRedASR2-LLM 89.07% (four-lecture adjusted), and Step-Audio 2 mini, which was stopped early at ~61% on the first seven segments because of heavy insertions. A 4-bit build of r3 scored 94.31% adjusted (3.11 points worse) and was rejected.
+The app is free for personal use and the full numbered evaluation record is open source:
+https://github.com/jimbo5168/speech2docx
 
-The app stays local. The current model SHA is 0f7b16c8adde1b941624d97281afd08d2b7e10e38ecb9e01aabc878060a91085. A full numbered record, scoring rules, and sources are in the open repo: https://github.com/jimbo5168/speech2docx/blob/main/docs/ASR评测记录.md
+#SpeechRecognition #ASR #MachineLearning #LoRA #AppleSilicon #MLX #NonProfit #Buddhism
