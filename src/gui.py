@@ -58,7 +58,7 @@ def _adopt_app_identity() -> None:
 
 def _running_inside_app() -> bool:
     parts = " ".join([sys.executable or "", *sys.argv])
-    return "为我闻思.app" in parts or "语音转文字.app" in parts
+    return any(name in parts for name in ("为我闻思.app", "为我闻思 Lite.app", "语音转文字.app"))
 
 
 def _apply_app_icon() -> None:
@@ -769,6 +769,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         _apply_app_icon()
         _focus_window()
         _hide_extra_dock_icon()
+        print("webview shown", flush=True)
 
     window.events.shown += on_shown
     print('starting webview', flush=True)

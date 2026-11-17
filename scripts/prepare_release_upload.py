@@ -2,9 +2,10 @@
 """Generate pinned release metadata and upload instructions. Never uploads or logs in."""
 import argparse
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shlex
 import sys
+import tarfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
 from model_download import MODEL_SHA, REPOSITORIES, sha256, validate_manifest
@@ -31,6 +32,14 @@ def main():
     if args.runtime:
         runtime = dict(version=1, release='runtime-macos-arm64', files=[dict(
             path=args.runtime.name, size=args.runtime.stat().st_size, sha256=sha256(args.runtime))])
+        with tarfile.open(args.runtime, 'r:gz') as archive:
+            members = archive.getmembers()
+            if any(not member.isfile() or PurePosixPath(member.name).is_absolute()
+                   or '..' in PurePosixPath(member.name).parts or '\\' in member.name for member in members):
+                raise ValueError('Runtime must contain safe regular files only')
+            runtime['extracted_bytes'] = sum(member.size for member in members)
+        runtime['minimum_macos'] = '26.0'
+        runtime['repositories'] = dict(REPOSITORIES)
         validate_manifest(runtime, require_r3=False)
         (args.output / 'runtime_manifest.json').write_text(json.dumps(runtime, indent=2) + '\n')
         uploads.extend([(args.runtime, args.runtime.name),
@@ -39,7 +48,7 @@ def main():
              'CLI references: https://huggingface.co/docs/huggingface_hub/en/guides/cli and '
              'https://github.com/modelscope/modelscope_hub#ms-hub-upload', '']
     for local, remote in uploads:
-        lines.append(f'- {local} → {remote}')
+        lines.append(f'- {local} → {remote} | {local.stat().st_size} bytes | SHA256 `{sha256(local)}`')
     lines.extend(['', '## Hugging Face', '', '```sh'])
     for local, remote in uploads:
         lines.append('hf upload ' + ' '.join(map(shlex.quote, [REPOSITORIES['Hugging Face'], str(local), remote])))

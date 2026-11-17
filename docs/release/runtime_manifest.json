@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "release": "runtime-macos-arm64",
+  "files": [
+    {
+      "path": "runtime-macos-arm64-cpython312-r3.tar.gz",
+      "size": 249544912,
+      "sha256": "e8c8061bce91f9ba5429fe62abaa038e8968e9072e8262802c1aaa7c76a84bb8"
+    }
+  ],
+  "extracted_bytes": 748469779,
+  "minimum_macos": "26.0",
+  "repositories": {
+    "Hugging Face": "jimbo5168/weiwowensi-asr-r3-8bit",
+    "ModelScope": "jimbo5168/weiwowensi-asr-r3-8bit"
+  }
+}

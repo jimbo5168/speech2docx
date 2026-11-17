@@ -294,7 +294,10 @@ class DownloadTests(unittest.TestCase):
         (model / 'model.safetensors').write_bytes(b'fixture weights')
         (model / 'config.json').write_bytes(b'{}')
         runtime = self.root / 'runtime.tar.gz'
-        runtime.write_bytes(b'fixture archive')
+        with tarfile.open(runtime, 'w:gz') as bundle:
+            member = tarfile.TarInfo('bin/python3')
+            member.size = len(b'fixture interpreter')
+            bundle.addfile(member, io.BytesIO(b'fixture interpreter'))
         output = self.root / 'release'
         script = Path(__file__).resolve().parents[1] / 'scripts/prepare_release_upload.py'
         def fixture_sha(path):
