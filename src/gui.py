@@ -33,6 +33,7 @@ from media import MEDIA_EXTS
 from paths import asr_home, default_out_dir
 from polish import DEFAULT_LEAD_PROMPT, cli_login_status, keychain_set, login_command
 from settings import first_run_if_needed
+from model_download import Downloader
 from subtitles import is_media_url
 from transcribe import _transcribe_arg
 
@@ -352,6 +353,29 @@ STATE = AppState()
 
 
 class JsApi:
+    def __init__(self):
+        self._model_downloads = None
+        self._download_lock = threading.Lock()
+
+    def _downloads(self):
+        # Lazy creation avoids any network or filesystem work during module import.
+        with self._download_lock:
+            if self._model_downloads is None:
+                self._model_downloads = Downloader(asr_home())
+            return self._model_downloads
+
+    def prepare_model_download(self):
+        return self._downloads().prepare()
+
+    def get_model_download(self):
+        return self._downloads().status()
+
+    def start_model_download(self):
+        return self._downloads().start()
+
+    def pause_model_download(self):
+        return self._downloads().pause()
+
     def get_state(self) -> dict[str, Any]:
         return STATE.snapshot()
 

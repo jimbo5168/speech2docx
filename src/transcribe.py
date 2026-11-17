@@ -157,15 +157,22 @@ def qwen_ft_path() -> Optional[Path]:
 
 
 def zh_asr_choice() -> str:
-    """'buddhist' (fine-tuned, default) or 'base'. Falls back to base if missing."""
+    """Return the explicitly selected 8-bit ASR model."""
     try:
         from config import load_config
         choice = load_config().get("zh_asr_model", "buddhist")
     except Exception:
         choice = "buddhist"
-    if choice == "buddhist" and qwen_ft_path() is None:
-        return "base"
     return "base" if choice == "base" else "buddhist"
+
+
+def qwen_model_path() -> Path:
+    if zh_asr_choice() == "base":
+        return resolve_hub_snapshot(QWEN_MODEL_ID)
+    path = qwen_ft_path()
+    if path is None:
+        raise RuntimeError("请先在「识别模型」中完成 r3 8-bit 模型下载与验证。")
+    return path
 
 
 def load_qwen():
@@ -173,8 +180,7 @@ def load_qwen():
     if _qwen_model is None:
         os.environ.setdefault("HF_HUB_OFFLINE", "1")
         from mlx_audio.stt import load
-        path = qwen_ft_path() if zh_asr_choice() == "buddhist" else None
-        path = path or resolve_hub_snapshot(QWEN_MODEL_ID)
+        path = qwen_model_path()
         log(f"Loading Qwen3-ASR from {path}")
         t0 = time.perf_counter()
         _qwen_model = load(str(path))
@@ -936,8 +942,7 @@ def transcribe_file(
         }
     raw_chunks = job / "raw"
     if lang == "zh":
-        model_path = qwen_ft_path() if zh_asr_choice() == "buddhist" else None
-        model_path = model_path or resolve_hub_snapshot(QWEN_MODEL_ID)
+        model_path = qwen_model_path()
         weights = [
             (p.name, p.stat().st_size, p.stat().st_mtime_ns, p.stat().st_ctime_ns)
             for p in sorted(model_path.glob("*.safetensors"))

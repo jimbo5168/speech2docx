@@ -694,7 +694,8 @@ textarea {
   clip-path: inset(50%)
 }
 #model-dialog {
-  width: 460px;
+  width: 560px;
+  max-width: calc(100vw - 48px);
   text-align: center
 }
 .model-icon {
@@ -859,4 +860,12 @@ input[type="radio"] {
 }
 input[type="radio"]:checked {
   border: 4px solid var(--accent);
+}
+
+#model-label {
+  flex: 1;
+  text-align: left;
+}
+#btn-model-pause {
+  flex-shrink: 0;
 }

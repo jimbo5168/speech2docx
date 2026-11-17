@@ -242,6 +242,51 @@ async function call(name, ...args) {
   }
 }
 
+let modelState = {status: "idle"};
+const downloadBytes = (value) => `${(value / 1e9).toFixed(2)} GB`;
+const downloadTime = (seconds) => seconds == null ? "测量中" : `${Math.max(0, Math.ceil(seconds / 60))} 分钟`;
+
+function drawModelDownload(state) {
+  modelState = state;
+  const percent = state.total ? Math.min(100, 100 * state.downloaded / state.total) : 0;
+  $("#model-bar").style.width = `${percent}%`;
+  $("#model-bar").parentElement.setAttribute("aria-valuenow", Math.round(percent));
+  const labels = {idle: "等待测速", checking: "正在校验本机文件…", probing: "正在测速 Hugging Face 与 ModelScope…",
+    prepared: "准备就绪，请确认后开始下载", downloading: "正在下载", verifying: "正在校验 SHA256…",
+    paused: "已暂停 · 重启后可继续", done: "全部文件 SHA256 验证通过 · 可离线识别", error: "下载未完成，可重试"};
+  $("#model-label").textContent = `${labels[state.status] || state.status} · ${Math.round(percent)}% · ${downloadBytes(state.downloaded || 0)} / ${downloadBytes(state.total || 0)}`;
+  const probes = state.probes || [];
+  $("#model-source").textContent = state.source
+    ? `${state.source} · ${(state.speed / 1e6).toFixed(2)} MB/s · 预计${state.status === "prepared" ? "下载用时" : "剩余"} ${downloadTime(state.remaining)}`
+    : probes.length ? "两个下载源暂不可用，请重新测速。" : "正在检查本机模型与下载源…";
+  const sourceStatus = {done: "全部文件验证通过", paused: "已暂停", verifying: "正在逐个验证 SHA256"};
+  if (state.source && sourceStatus[state.status]) {
+    $("#model-source").textContent = `${state.source} · ${sourceStatus[state.status]}`;
+  }
+  $("#model-error").textContent = state.error || "";
+  const button = $("#btn-model-pause");
+  button.textContent = {prepared: "开始下载", paused: "继续下载", error: "重新测速", done: "已验证"}[state.status] || "暂停";
+  button.disabled = ["idle", "checking", "probing", "verifying", "done"].includes(state.status);
+}
+
+async function openModelDownload(onlyIfNeeded = false) {
+  if (!api()) return;
+  if (!onlyIfNeeded) $("#model-dialog").showModal();
+  try {
+    drawModelDownload(await api().prepare_model_download());
+    if (onlyIfNeeded) {
+      // Wait for local verification before deciding whether first-run setup is needed.
+      const timer = setInterval(async () => {
+        const state = await api().get_model_download();
+        if (["checking", "idle"].includes(state.status)) return;
+        clearInterval(timer);
+        drawModelDownload(state);
+        if (!state.ready && !$("#model-dialog").open) $("#model-dialog").showModal();
+      }, 500);
+    }
+  } catch (err) { toast(err.message || String(err)); }
+}
+
 function bind() {
   const navigate = (queue) => {
     $("#panel-convert").classList.toggle("queue-view", queue);
@@ -257,29 +302,21 @@ function bind() {
     document.documentElement.dataset.theme = theme;
     try { localStorage.setItem("wwws-theme", theme); } catch (_) {}
   });
-  $("#btn-model").addEventListener("click", () => $("#model-dialog").showModal());
+  $("#btn-model").addEventListener("click", openModelDownload);
   $("#btn-close-model").addEventListener("click", () => $("#model-dialog").close());
-  let modelPercent = 32;
-  let modelPaused = false;
-  const drawModel = () => {
-    $("#model-bar").style.width = `${modelPercent}%`;
-    let label = `${modelPercent}% · 预计剩余 ${Math.ceil((100 - modelPercent) / 24)} 分钟`;
-    if (modelPaused) label = `${modelPercent}% · 已暂停`;
-    if (modelPercent === 100) label = "演示完成";
-    $("#model-label").textContent = label;
-    $("#btn-model-pause").textContent = modelPaused ? "继续" : "暂停";
-    $("#btn-model-pause").disabled = modelPercent === 100;
-  };
-  $("#btn-model-pause").addEventListener("click", () => {
-    modelPaused = !modelPaused;
-    drawModel();
+  $("#btn-model-pause").addEventListener("click", async () => {
+    const method = ["downloading", "verifying"].includes(modelState.status)
+      ? "pause_model_download"
+      : modelState.status === "error" ? "prepare_model_download" : "start_model_download";
+    try { drawModelDownload(await api()[method]()); }
+    catch (err) { toast(err.message || String(err)); }
   });
-  setInterval(() => {
-    if ($("#model-dialog").open && !modelPaused && modelPercent < 100) {
-      modelPercent += 1;
-      drawModel();
+  setInterval(async () => {
+    if (api() && $("#model-dialog").open) {
+      try { drawModelDownload(await api().get_model_download()); }
+      catch (err) { console.error(err); }
     }
-  }, 2500);
+  }, 500);
   $("#btn-settings").addEventListener("click", () => $("#settings-dialog").showModal());
   $("#btn-close-settings").addEventListener("click", () => $("#settings-dialog").close());
   $("#btn-welcome").addEventListener("click", async () => {
@@ -289,7 +326,7 @@ function bind() {
     try { localStorage.setItem("wwws-welcome-seen", "1"); } catch (_) {}
     $("#welcome-dialog").close();
     if (provider !== "local") $("#settings-dialog").showModal();
-    else $("#model-dialog").showModal();
+    openModelDownload();
   });
 
   $("#btn-files").addEventListener("click", () => call("pick_files"));
@@ -365,5 +402,6 @@ window.addEventListener("pywebviewready", () => {
   let seen = false;
   try { seen = localStorage.getItem("wwws-welcome-seen") === "1"; } catch (_) { seen = true; }
   if (!seen) $("#welcome-dialog").showModal();
+  else openModelDownload(true);
   setInterval(refresh, 400);
 });
