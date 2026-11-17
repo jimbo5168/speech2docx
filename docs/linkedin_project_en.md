@@ -20,7 +20,7 @@ Training data (final round)
 • 15,280 aligned audio-text segments kept after quality filtering (out of 15,987)
 • About 3 GB of downloaded lecture audio and transcripts, cut into about 25 GB of WAV training segments
 • One 68-minute lecture held out and never trained on
-• About two days of total on-device work on one Mac mini, covering data preparation, training, and evaluation
+• About 54 hours (just over two days) from first setup to the current version, including data preparation, training, and evaluation, all on one Mac mini
 
 Results (held-out lecture, strict word accuracy vs. human transcript)
 1. Base Qwen3-ASR-1.7B: 76.41%
