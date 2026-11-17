@@ -8,12 +8,20 @@
 </head>
 <body>
   <div class="app">
-    <header class="hero">
-      <div class="brand"><span class="brand-mark" aria-hidden="true">闻</span><div><h1>为我闻思</h1><p class="hint">让每一次闻思，都有文字相伴。</p></div></div>
-      <button class="btn" id="btn-settings" type="button">⚙ 设置</button>
-    </header>
-
+    <aside class="sidebar">
+      <div class="traffic-space" aria-hidden="true"></div>
+      <div class="brand"><span class="brand-mark">闻</span><div><h1>为我闻思</h1><p class="hint">闻思有迹</p></div></div>
+      <p class="sidebar-label">工作空间</p>
+      <nav aria-label="工作空间">
+        <button class="nav-item selected" id="nav-convert"><svg viewBox="0 0 24 24"><path d="M12 4v16M4 12h16"/></svg>转换</button>
+        <button class="nav-item" id="nav-queue"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M3 6h1M3 12h1M3 18h1"/></svg>队列与历史<span id="queue-count">0</span></button>
+      </nav>
+      <div class="sidebar-bottom"><button class="nav-item" id="btn-settings"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 17h16"/><circle cx="9" cy="7" r="3"/><circle cx="15" cy="17" r="3"/></svg>设置</button><p>音频在本机识别<span>Word 文稿 · 为闻思留存</span></p></div>
+    </aside>
+    <main class="workspace">
+      <header class="toolbar"><span id="view-title">转换</span><div><button class="btn quiet" id="btn-model">识别模型</button><button class="btn quiet" id="btn-theme" aria-label="切换明暗主题">明暗外观</button></div></header>
     <section id="panel-convert" class="panel active">
+      <div class="page-heading"><h2>新的转换</h2><p class="help">把声音里的智慧，留在文字中。</p></div>
       <div id="drop-zone" class="drop-zone">
         <div class="drop-icon" aria-hidden="true">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -23,21 +31,13 @@
             <path d="M9 14h6"/>
           </svg>
         </div>
-        <p class="drop-title">拖入音频、视频或贴上 YouTube 网址</p>
-        <p class="drop-sub">一段开示，一份清晰的文字稿。支持一次加入多个文件。</p>
+        <p class="drop-title">拖入音频或视频</p>
+        <p class="drop-sub">支持多个文件，也可选择整个文件夹</p>
         <div class="row actions">
           <button type="button" class="btn primary" id="btn-files">选择文件…</button>
           <button type="button" class="btn" id="btn-folder">选择文件夹…</button>
         </div>
-      </div>
-
-      <div class="card url-card">
-        <label class="field-label" for="youtube-url">YouTube 链接</label>
-        <div class="row">
-          <input id="youtube-url" type="text" spellcheck="false" placeholder="https://www.youtube.com/watch?v=…" />
-          <button type="button" class="btn primary" id="btn-url">转换</button>
-        </div>
-        <p class="help">如果影片有官方字幕，会自动用来校对。</p>
+        <div class="url-input"><label class="sr-only" for="youtube-url">YouTube 链接</label><div class="row"><input id="youtube-url" type="url" spellcheck="false" placeholder="或在此粘贴 YouTube 链接" /><button type="button" class="btn" id="btn-url">转换 ↵</button></div></div>
       </div>
 
       <div class="card split">
@@ -59,7 +59,7 @@
         </div>
       </div>
 
-      <div class="card queue-card">
+      <div class="card queue-card" id="queue-section">
         <div class="queue-head">
           <p class="field-label">转换队列</p>
           <button type="button" class="btn link" id="btn-clear">清除已完成</button>
@@ -73,6 +73,7 @@
       </div>
     </section>
 
+    </main>
     <dialog id="settings-dialog" aria-labelledby="settings-title">
       <div class="sheet-head"><div><h2 id="settings-title">设置</h2><p class="help">更改后自动保存，下一次转换生效。</p></div><button class="btn" id="btn-close-settings" type="button">完成</button></div>
       <section id="panel-settings">
@@ -161,7 +162,12 @@
       </fieldset><p class="help">选择云端时，仅转录后的文字会发送给所选服务。以后可随时在设置中更改。</p>
       <button id="btn-welcome" class="btn primary" type="button">开始使用</button>
     </dialog>
-    <footer>音频在本机识别 <span>·</span> Word 文稿，为闻思留存</footer>
+    <dialog id="model-dialog" aria-labelledby="model-title">
+      <div class="sheet-head"><h2 id="model-title">准备识别模型</h2><button class="btn" id="btn-close-model">完成</button></div>
+      <div class="model-icon" aria-hidden="true">↓</div><h3>佛学中文识别模型</h3><p class="help">模型大小 1.8 GB · 下载后可在本机识别</p>
+      <p class="demo-note">下载演示 · 模拟进度</p><div class="bar"><span id="model-bar" style="width:32%"></span></div>
+      <div class="row model-status"><span id="model-label">32% · 预计剩余 3 分钟</span><button class="btn" id="btn-model-pause">暂停</button></div>
+    </dialog>
     <div id="toast" class="toast hidden" role="status"></div>
   </div>
   <script src="app.js"></script>

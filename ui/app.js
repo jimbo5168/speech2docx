@@ -2,6 +2,7 @@ const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
 let lastNotice = "";
+let selectedJob = null;
 
 function toast(msg) {
   if (!msg) return;
@@ -31,6 +32,22 @@ function statusText(job) {
   return job.status || "等待";
 }
 
+function updateRemaining() {
+  $$("#queue li").forEach((row) => {
+    const time = row.querySelector(".elapsed");
+    const meter = row.querySelector("progress");
+    const remaining = row.querySelector(".remaining");
+    if (!remaining) return;
+    if (!time || !meter || meter.value <= 0) {
+      remaining.textContent = " · 正在估算剩余时间";
+      return;
+    }
+    const elapsed = Math.max(0, Date.now() / 1000 - Number(time.dataset.start));
+    const minutes = Math.max(1, Math.ceil(elapsed * (100 - meter.value) / meter.value / 60));
+    remaining.textContent = ` · 预计剩余 ${minutes} 分钟`;
+  });
+}
+
 function elapsedText(start, end) {
   const seconds = Math.max(0, Math.floor((end || Date.now() / 1000) - start));
   return ` · 已用时 ${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒`;
@@ -41,9 +58,11 @@ function renderQueue(state) {
   const signature = JSON.stringify(jobs);
   if (renderQueue.signature === signature) {
     $$(".elapsed").forEach((el) => { el.textContent = elapsedText(Number(el.dataset.start), Number(el.dataset.end) || null); });
+    updateRemaining();
     return;
   }
   renderQueue.signature = signature;
+  $("#queue-count").textContent = jobs.length;
   const list = $("#queue");
   const empty = $("#queue-empty");
   const progress = $("#global-progress");
@@ -68,6 +87,33 @@ function renderQueue(state) {
   for (const job of jobs) {
     const li = document.createElement("li");
     const st = statusClass(job.status);
+    li.tabIndex = 0;
+    li.classList.toggle("selected", selectedJob === job.id);
+    li.setAttribute("aria-label", `${job.name || "文件"} · ${statusText(job)}`);
+    const select = () => {
+      selectedJob = job.id;
+      $$("#queue li").forEach((row) => row.classList.toggle("selected", row === li));
+    };
+    li.addEventListener("click", select);
+    li.addEventListener("keydown", (event) => {
+      if (event.target !== li) return;
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        select();
+      }
+      const adjacent = {ArrowDown: li.nextElementSibling, ArrowUp: li.previousElementSibling};
+      const next = adjacent[event.key];
+      if (next) {
+        event.preventDefault();
+        next.focus();
+        next.click();
+      }
+    });
+    const icon = document.createElement("div");
+    icon.className = "q-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.innerHTML = '<svg viewBox="0 0 24 28"><path d="M14 2H5v24h15V8zM14 2v6h6M8 14h8M8 18h8M8 22h5"/></svg>';
+    li.append(icon);
     const name = document.createElement("div");
     name.className = "q-name";
     name.title = job.source || "";
@@ -80,7 +126,8 @@ function renderQueue(state) {
       spinner.setAttribute("aria-hidden", "true");
       status.append(spinner);
     }
-    status.append(document.createTextNode(statusText(job)));
+    status.append(document.createTextNode(st === "fail" ? "失败" : statusText(job)));
+    status.title = statusText(job);
     const message = document.createElement("div");
     message.className = "q-msg";
     const elapsed = job.started_at ? Math.max(0, Math.floor((job.finished_at || Date.now() / 1000) - job.started_at)) : null;
@@ -92,6 +139,11 @@ function renderQueue(state) {
       time.dataset.end = job.finished_at || "";
       time.textContent = elapsedText(job.started_at, job.finished_at);
       message.append(time);
+    }
+    if (st === "run") {
+      const remaining = document.createElement("span");
+      remaining.className = "remaining";
+      message.append(remaining);
     }
     li.append(name, status, message);
     if (st === "run" && job.stage === "transcribe" && job.percent != null) {
@@ -108,7 +160,7 @@ function renderQueue(state) {
       const openBtn = document.createElement("button");
       openBtn.className = "btn primary";
       openBtn.type = "button";
-      openBtn.textContent = "打开 Word";
+      openBtn.textContent = "打开";
       openBtn.addEventListener("click", () => api().open_docx(job.id));
       const revealBtn = document.createElement("button");
       revealBtn.className = "btn";
@@ -120,6 +172,7 @@ function renderQueue(state) {
     }
     list.appendChild(li);
   }
+  updateRemaining();
 }
 
 function applySettings(state) {
@@ -190,6 +243,43 @@ async function call(name, ...args) {
 }
 
 function bind() {
+  const navigate = (queue) => {
+    $("#panel-convert").classList.toggle("queue-view", queue);
+    $("#nav-convert").classList.toggle("selected", !queue);
+    $("#nav-queue").classList.toggle("selected", queue);
+    $("#view-title").textContent = queue ? "队列与历史" : "转换";
+  };
+  $("#nav-convert").addEventListener("click", () => navigate(false));
+  $("#nav-queue").addEventListener("click", () => navigate(true));
+  try { document.documentElement.dataset.theme = localStorage.getItem("wwws-theme") || "dark"; } catch (_) {}
+  $("#btn-theme").addEventListener("click", () => {
+    const theme = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    document.documentElement.dataset.theme = theme;
+    try { localStorage.setItem("wwws-theme", theme); } catch (_) {}
+  });
+  $("#btn-model").addEventListener("click", () => $("#model-dialog").showModal());
+  $("#btn-close-model").addEventListener("click", () => $("#model-dialog").close());
+  let modelPercent = 32;
+  let modelPaused = false;
+  const drawModel = () => {
+    $("#model-bar").style.width = `${modelPercent}%`;
+    let label = `${modelPercent}% · 预计剩余 ${Math.ceil((100 - modelPercent) / 24)} 分钟`;
+    if (modelPaused) label = `${modelPercent}% · 已暂停`;
+    if (modelPercent === 100) label = "演示完成";
+    $("#model-label").textContent = label;
+    $("#btn-model-pause").textContent = modelPaused ? "继续" : "暂停";
+    $("#btn-model-pause").disabled = modelPercent === 100;
+  };
+  $("#btn-model-pause").addEventListener("click", () => {
+    modelPaused = !modelPaused;
+    drawModel();
+  });
+  setInterval(() => {
+    if ($("#model-dialog").open && !modelPaused && modelPercent < 100) {
+      modelPercent += 1;
+      drawModel();
+    }
+  }, 2500);
   $("#btn-settings").addEventListener("click", () => $("#settings-dialog").showModal());
   $("#btn-close-settings").addEventListener("click", () => $("#settings-dialog").close());
   $("#btn-welcome").addEventListener("click", async () => {
@@ -199,6 +289,7 @@ function bind() {
     try { localStorage.setItem("wwws-welcome-seen", "1"); } catch (_) {}
     $("#welcome-dialog").close();
     if (provider !== "local") $("#settings-dialog").showModal();
+    else $("#model-dialog").showModal();
   });
 
   $("#btn-files").addEventListener("click", () => call("pick_files"));
