@@ -12,6 +12,8 @@ Local speech-to-text for macOS on Apple Silicon. Drop an MP3, M4A, WAV, or a vid
 
 Audio is transcribed only on the machine. The first-run chooser preselects Local (LM Studio Qwen) so you can check accuracy before switching to a cloud model. The Word file contains only the title, the 来源 (source) line and the transcript; an optional appendix with the unpolished ASR text (附录：原始转录) can be turned on in Settings. English audio is transcribed, optionally proofread against English subtitles, then translated into Simplified Chinese with the Buddhist glossary (bodhicitta → 菩提心). The Word file is a two-column English/Chinese layout by default. Documents use a bundled typography template (A5, header banner, footer page numbers, 华文行楷 titles and 宋体 body). Choose your own template in Settings if you like. Optional polishing can use Local, or a signed-in Claude / ChatGPT / Gemini subscription, or an API key.
 
+Speed (measured on an Apple M5 Pro, 64 GB): a 101.75-minute lecture took about 2.75 minutes without polishing and about 6.5 minutes with local Qwen polishing, so a 2-hour recording takes roughly 3 minutes, or about 8 minutes with polishing. Older or lower-memory Macs will be slower.
+
 ## 评测结果 Evaluation results
 
 当前默认中文识别模型是 **r3**（Qwen3-ASR-1.7B 佛学 LoRA，MLX 8-bit），外加 `repetition_penalty=1.0`（rp1_tok1）解码和第七轮漏词补救（对可能漏字的片段切开重识别）。  
@@ -46,6 +48,7 @@ Audio is transcribed only on the machine. The first-run chooser preselects Local
 - **中文识别**：默认佛学微调版 r3（Qwen3-ASR-1.7B LoRA，MLX 8-bit）。留出讲调整分 97.56%，四讲调整平均 97.44%。详见 [评测记录](docs/ASR评测记录.md)
 - **藏文识别**：`tenzin/whisper-small-tibetan-ct2`（faster-whisper）
 - **长录音**：自动按约 8 分钟分片，可转 2 小时以上，支持中断后续传
+- **转写速度**：在 Apple M5 Pro（64 GB）上实测，101.75 分钟的讲座不润稿约 2.75 分钟、加本地千问润稿约 6.5 分钟；换算成 2 小时音频，不润稿约 3 分钟，加润稿约 8 分钟。较旧或内存较小的 Mac 会慢一些。详见 [评测记录](docs/ASR评测记录.md)
 - **视频输入**：可把 MP4 / MOV / MKV / WEBM 等视频拖到应用、桌面文件夹或命令行，会先抽出音轨再转写
 - **字幕校对**：若视频有内嵌字幕、同名的 SRT/VTT/ASS，或命令行给出 YouTube 网址，会把字幕与识别结果对照；能确定的按字幕和佛教词库修正，无法确定的在 Word 里黄标，并写「校对说明」。YouTube 官方字幕优先，自动字幕会标明可信度较低
 - **佛教词库**：可编辑的专有名词表，同时用于识别提示和文字修饰
