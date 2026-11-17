@@ -2,6 +2,8 @@
 
 本地语音转文字工具（macOS，Apple Silicon）。把 MP3 / M4A / WAV 等音频拖到应用图标或桌面文件夹，即会在「下载」文件夹生成排好版的 Word 文档（`.docx`）。
 
+**语言：只支持中文**（普通话，含方言口音）。唯一例外是中文讲课里出现的藏文种子字和咒语，会用藏文写出来。不支持英文，也没有单独的藏文模式。
+
 音频始终只在本机识别。可选的文字修饰可以使用本地大模型（LM Studio），或你已登录的 Claude / ChatGPT / Gemini 订阅，也可以改用 API 金钥。
 
 ---
@@ -9,6 +11,8 @@
 **Wei Wo Wen Si** (为我闻思; traditional 為我聞思) is published in this repository as **speech2docx**.
 
 Local speech-to-text for macOS on Apple Silicon. Drop an MP3, M4A, WAV, or a video (MP4, MOV, MKV, WEBM, …) onto the app icon or a Desktop folder and a formatted Word document appears in Downloads. Video files are converted by extracting the soundtrack first. If subtitles are embedded, sit in a sidecar file, or come from a YouTube URL, they are aligned with the ASR text for proofreading; unresolved disagreements are highlighted in yellow.
+
+**Language: Chinese only** (Mandarin, including dialects and accents). The only exception is Tibetan seed syllables and mantras inside Chinese lectures, which are written in Tibetan script. English and a separate Tibetan mode are not supported.
 
 Audio is transcribed only on the machine. Chinese lectures produce Chinese Word documents with title, 听打稿, source and transcript body, without a raw-transcript appendix. Tibetan mantras within Chinese lectures retain Tibetan script. Local transcription is the default; optional polishing and the model download sheet remain available. Documents use the bundled A5 typography template; custom templates can be selected in Settings.
 
@@ -79,7 +83,7 @@ cd speech2docx
 
 ## 用法 Usage
 
-点 Dock 或「应用程序」里的「为我闻思」，就会打开应用窗口。第一次使用默认已选「本地千问」，可在窗口的「设定」页随时更改。
+点 Dock 或「应用程序」里的「为我闻思」，就会打开应用窗口。第一次使用默认为「本地（直接转写）」，直接按继续即可，无需安装任何软件；可在「设置」里更改。
 
 把音频或视频拖进来，或选择档案、文件夹，或贴上 YouTube 链接，转好的 Word 会放在输出位置（默认为「下载」文件夹）。
 
