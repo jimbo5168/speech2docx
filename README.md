@@ -1,5 +1,13 @@
 # 为我闻思（Wei Wo Wen Si） / speech2docx
 
+## 下载 Download
+
+Apple Silicon Mac（macOS 26+）可下载 Lite 应用。首次准备约 3 GB，之后可离线听打，个人使用免费。
+
+Download the Lite app for Apple Silicon Macs running macOS 26+. First-time setup downloads approximately 3 GB. Transcription then works offline. Free for personal use.
+
+[下载最新版本 / Download the latest release](https://github.com/jimbo5168/speech2docx/releases/latest)
+
 本地语音转文字工具（macOS，Apple Silicon）。把 MP3 / M4A / WAV 等音频拖到应用图标或桌面文件夹，即会在「下载」文件夹生成排好版的 Word 文档（`.docx`）。
 
 **语言：只支持中文**（普通话，含方言口音）。唯一例外是中文讲课里出现的藏文种子字和咒语，会用藏文写出来。不支持英文，也没有单独的藏文模式。
