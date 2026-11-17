@@ -1107,7 +1107,7 @@ def transcribe_file(
         source_name=source_name,
         sections=sections,
         summary=summary,
-        note=note,
+        note="" if note == "未修饰" else note,
         lang="bo" if lang == "bo" else "zh",
         duration=duration,
         polish_label=label_map.get(provider_used, provider_used),
