@@ -12,6 +12,13 @@ What I did
 • Always scored on a 68-minute lecture that was never used in training, to check generalization
 • Added a fast path: when a video already has text subtitles, the tool exports them in under a second instead of re-transcribing
 
+Training data (final round)
+• 65 lectures, 102.8 hours of audio
+• About 1.15 million Chinese characters of human-made transcripts used as labels
+• 15,280 aligned audio-text segments kept after quality filtering (out of 15,987)
+• About 3 GB of downloaded lecture audio and transcripts, cut into about 25 GB of WAV training segments
+• One 68-minute lecture held out and never trained on
+
 Results (held-out lecture, strict word accuracy vs. human transcript)
 1. Base Qwen3-ASR-1.7B: 76.41%
 2. Fine-tune round 1 (3 lectures, 3.4 h): 87.33%  (+10.9 points)
