@@ -8,6 +8,7 @@ import os
 import socket
 import sys
 import threading
+import time
 import traceback
 import uuid
 import webbrowser
@@ -233,6 +234,9 @@ class AppState:
                     "name": item["name"],
                     "status": "等待",
                     "percent": 0,
+                    "stage": "waiting",
+                    "started_at": None,
+                    "finished_at": None,
                     "message": "等待开始",
                     "error": "",
                     "docx": "",
@@ -285,7 +289,7 @@ class AppState:
 
     def _run_one(self, job: dict[str, Any]) -> None:
         job_id = job["id"]
-        self.update(job_id, status="转录中", percent=1, message="准备中…", error="")
+        self.update(job_id, status="转录中", stage="transcribe", started_at=time.time(), percent=1, message="准备中…", error="")
 
         def on_progress(stage: str, percent=None, message: str = "") -> None:
             status = STAGE_STATUS.get(stage, "转录中")
@@ -293,6 +297,7 @@ class AppState:
                 status = "修饰中" if not job.get("docx") else "完成"
             fields: dict[str, Any] = {
                 "status": status if status != "完成" else "修饰中",
+                "stage": stage,
                 "message": message or "",
             }
             if percent is not None:
@@ -313,6 +318,8 @@ class AppState:
             self.update(
                 job_id,
                 status="完成",
+                stage="done",
+                finished_at=time.time(),
                 percent=100,
                 message="已保存 Word 文档",
                 docx=docx,
@@ -331,6 +338,7 @@ class AppState:
             self.update(
                 job_id,
                 status="失败",
+                finished_at=time.time(),
                 percent=0,
                 message="",
                 error=short,

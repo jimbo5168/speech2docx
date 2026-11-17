@@ -24,13 +24,26 @@ function statusClass(status) {
 }
 
 function statusText(job) {
+  const stage = {download: "下载", extract: "提取音轨", transcribe: "识别", proofread: "校对", polish: "修饰", write: "生成 Word"}[job.stage];
+  if (stage && !["完成", "失败", "等待"].includes(job.status)) return stage + (job.stage === "transcribe" && job.percent != null ? ` ${job.percent}%` : "中");
   if (job.status === "转录中" && job.percent) return `转录中 ${job.percent}%`;
   if (job.status === "失败" && job.error) return `失败：${job.error}`;
   return job.status || "等待";
 }
 
+function elapsedText(start, end) {
+  const seconds = Math.max(0, Math.floor((end || Date.now() / 1000) - start));
+  return ` · 已用时 ${Math.floor(seconds / 60)} 分 ${seconds % 60} 秒`;
+}
+
 function renderQueue(state) {
   const jobs = state.jobs || [];
+  const signature = JSON.stringify(jobs);
+  if (renderQueue.signature === signature) {
+    $$(".elapsed").forEach((el) => { el.textContent = elapsedText(Number(el.dataset.start), Number(el.dataset.end) || null); });
+    return;
+  }
+  renderQueue.signature = signature;
   const list = $("#queue");
   const empty = $("#queue-empty");
   const progress = $("#global-progress");
@@ -42,7 +55,9 @@ function renderQueue(state) {
   const active = jobs.find((j) => !["完成", "失败", "等待"].includes(j.status));
   if (active) {
     progress.classList.remove("hidden");
-    bar.style.width = `${Math.max(active.percent || 0, 4)}%`;
+    const measured = active.stage === "transcribe" || (!active.stage && active.status === "转录中");
+    bar.style.width = measured ? `${Math.min(100, Math.max(active.percent || 0, 4))}%` : "35%";
+    bar.classList.toggle("indeterminate", !measured);
     label.textContent = `${active.name} · ${statusText(active)}${active.message ? " · " + active.message : ""}`;
   } else {
     progress.classList.add("hidden");
@@ -53,23 +68,52 @@ function renderQueue(state) {
   for (const job of jobs) {
     const li = document.createElement("li");
     const st = statusClass(job.status);
-    li.innerHTML = `
-      <div class="q-name" title="${job.source || ""}">${job.name || job.source}</div>
-      <div class="q-status ${st}">${statusText(job)}</div>
-      <div class="q-msg">${job.status === "失败" ? (job.error || "") : (job.message || "")}</div>
-    `;
+    const name = document.createElement("div");
+    name.className = "q-name";
+    name.title = job.source || "";
+    name.textContent = job.name || job.source || "未命名文件";
+    const status = document.createElement("div");
+    status.className = `q-status ${st}`;
+    if (st === "run") {
+      const spinner = document.createElement("span");
+      spinner.className = "spinner";
+      spinner.setAttribute("aria-hidden", "true");
+      status.append(spinner);
+    }
+    status.append(document.createTextNode(statusText(job)));
+    const message = document.createElement("div");
+    message.className = "q-msg";
+    const elapsed = job.started_at ? Math.max(0, Math.floor((job.finished_at || Date.now() / 1000) - job.started_at)) : null;
+    message.textContent = (job.status === "失败" ? job.error : job.message) || "";
+    if (elapsed !== null) {
+      const time = document.createElement("span");
+      time.className = "elapsed";
+      time.dataset.start = job.started_at;
+      time.dataset.end = job.finished_at || "";
+      time.textContent = elapsedText(job.started_at, job.finished_at);
+      message.append(time);
+    }
+    li.append(name, status, message);
+    if (st === "run" && job.stage === "transcribe" && job.percent != null) {
+      const meter = document.createElement("progress");
+      meter.className = "job-progress";
+      meter.max = 100;
+      meter.value = Math.max(0, Math.min(100, job.percent));
+      meter.setAttribute("aria-label", `${job.name} 识别进度`);
+      li.append(meter);
+    }
     if (job.status === "完成" && job.docx) {
       const actions = document.createElement("div");
       actions.className = "q-actions";
       const openBtn = document.createElement("button");
       openBtn.className = "btn primary";
       openBtn.type = "button";
-      openBtn.textContent = "打开文档";
+      openBtn.textContent = "打开 Word";
       openBtn.addEventListener("click", () => api().open_docx(job.id));
       const revealBtn = document.createElement("button");
       revealBtn.className = "btn";
       revealBtn.type = "button";
-      revealBtn.textContent = "在 Finder 中显示";
+      revealBtn.textContent = "在访达中显示";
       revealBtn.addEventListener("click", () => api().reveal_docx(job.id));
       actions.append(openBtn, revealBtn);
       li.appendChild(actions);
@@ -90,7 +134,7 @@ function applySettings(state) {
   if ($("#opt-summary")) $("#opt-summary").checked = !!s.include_summary;
   if ($("#opt-headings")) $("#opt-headings").checked = !!s.include_headings;
   const leadBox = $("#lead-prompt");
-  if (leadBox && document.activeElement !== leadBox) {
+  if (leadBox && document.activeElement !== leadBox && !leadBox.dataset.dirty) {
     leadBox.value = s.polish_lead_prompt || s.polish_lead_prompt_default || "";
     leadBox.dataset.default = s.polish_lead_prompt_default || "";
   }
@@ -106,7 +150,7 @@ function applySettings(state) {
     const logn = info.logged_in ? "已登录" : "尚未登录";
     $("#login-status").textContent = `${inst}，${logn}。`;
   } else {
-    $("#login-status").textContent = "金钥会保存在本机钥匙圈，不会写入设定文件。";
+    $("#login-status").textContent = "密钥会保存在本机钥匙圈，不会写入设定文件。";
   }
 }
 
@@ -115,6 +159,7 @@ function render(state) {
   $$(`#lang-group input[value="${state.lang || "zh"}"]`).forEach((el) => { el.checked = true; });
   $("#out-path").textContent = state.out_dir_display || state.out_dir || "~/Downloads";
   $("#out-path").title = state.out_dir || "";
+  $(".app").classList.toggle("has-jobs", !!(state.jobs && state.jobs.length));
   renderQueue(state);
   applySettings(state);
   if (state.notice && state.notice !== lastNotice) {
@@ -134,17 +179,26 @@ async function refresh() {
 
 async function call(name, ...args) {
   if (!api()) return;
-  const result = await api()[name](...args);
-  if (result && typeof result === "object") render(result);
-  return result;
+  try {
+    const result = await api()[name](...args);
+    if (result && typeof result === "object") render(result);
+    return result;
+  } catch (err) {
+    toast("操作未完成，请重试。" + (err.message || ""));
+    return null;
+  }
 }
 
 function bind() {
-  $$(".tab").forEach((tab) => {
-    tab.addEventListener("click", () => {
-      $$(".tab").forEach((t) => t.classList.toggle("active", t === tab));
-      $$(".panel").forEach((p) => p.classList.toggle("active", p.id === `panel-${tab.dataset.tab}`));
-    });
+  $("#btn-settings").addEventListener("click", () => $("#settings-dialog").showModal());
+  $("#btn-close-settings").addEventListener("click", () => $("#settings-dialog").close());
+  $("#btn-welcome").addEventListener("click", async () => {
+    const provider = $("input[name='welcome-provider']:checked").value;
+    const result = await call("save_settings", {polish_provider: provider});
+    if (!result) return;
+    try { localStorage.setItem("wwws-welcome-seen", "1"); } catch (_) {}
+    $("#welcome-dialog").close();
+    if (provider !== "local") $("#settings-dialog").showModal();
   });
 
   $("#btn-files").addEventListener("click", () => call("pick_files"));
@@ -170,17 +224,18 @@ function bind() {
     english_output: ($("#english-group input:checked") || {}).value,
     zh_asr_model: ($("#zhasr-group input:checked") || {}).value,
   }, extra || {}));
+  $("#lead-prompt").addEventListener("input", () => { $("#lead-prompt").dataset.dirty = "1"; });
   $$("#provider-group input, #auth-group input, #english-group input, #zhasr-group input").forEach((el) => {
-    el.addEventListener("change", saveSettings);
+    el.addEventListener("change", () => saveSettings());
   });
-  $("#opt-appendix").addEventListener("change", saveSettings);
-  if ($("#opt-summary")) $("#opt-summary").addEventListener("change", saveSettings);
-  if ($("#opt-headings")) $("#opt-headings").addEventListener("change", saveSettings);
-  if ($("#btn-save-lead")) $("#btn-save-lead").addEventListener("click", () => saveSettings().then(() => toast("校对提示词已保存")));
+  $("#opt-appendix").addEventListener("change", () => saveSettings());
+  if ($("#opt-summary")) $("#opt-summary").addEventListener("change", () => saveSettings());
+  if ($("#opt-headings")) $("#opt-headings").addEventListener("change", () => saveSettings());
+  if ($("#btn-save-lead")) $("#btn-save-lead").addEventListener("click", () => saveSettings().then((result) => { if (result) { delete $("#lead-prompt").dataset.dirty; toast("校对提示词已保存"); } }));
   if ($("#btn-reset-lead")) $("#btn-reset-lead").addEventListener("click", () => {
     const box = $("#lead-prompt");
     if (box) box.value = box.dataset.default || "";
-    saveSettings();
+    saveSettings().then((result) => { if (result) delete box.dataset.dirty; });
   });
   $("#btn-login").addEventListener("click", () => {
     const provider = ($("#provider-group input:checked") || {}).value;
@@ -201,11 +256,23 @@ function bind() {
   ["dragleave", "drop"].forEach((ev) => {
     zone.addEventListener(ev, (e) => { e.preventDefault(); if (ev === "dragleave") zone.classList.remove("dragover"); });
   });
-  zone.addEventListener("drop", () => zone.classList.remove("dragover"));
+  zone.addEventListener("drop", (event) => {
+    zone.classList.remove("dragover");
+    // Native file drops remain handled by Python's pywebview drop listener.
+    if (!event.dataTransfer.files.length) {
+      const text = event.dataTransfer.getData("text/plain");
+      if (text) { $("#youtube-url").value = text; call("enqueue_url", text); }
+    }
+  });
 }
 
 window.addEventListener("pywebviewready", () => {
+  if (window.uiBound) return;
+  window.uiBound = true;
   bind();
   refresh();
+  let seen = false;
+  try { seen = localStorage.getItem("wwws-welcome-seen") === "1"; } catch (_) { seen = true; }
+  if (!seen) $("#welcome-dialog").showModal();
   setInterval(refresh, 400);
 });

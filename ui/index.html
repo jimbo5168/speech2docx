@@ -9,13 +9,9 @@
 <body>
   <div class="app">
     <header class="hero">
-      <p class="hint">把音频或视频拖进来，或选择档案、文件夹，或贴上 YouTube 链接，转好的 Word 会放在输出位置。</p>
+      <div class="brand"><span class="brand-mark" aria-hidden="true">闻</span><div><h1>为我闻思</h1><p class="hint">让每一次闻思，都有文字相伴。</p></div></div>
+      <button class="btn" id="btn-settings" type="button">⚙ 设置</button>
     </header>
-
-    <nav class="tabs" role="tablist">
-      <button class="tab active" data-tab="convert" type="button">转换</button>
-      <button class="tab" data-tab="settings" type="button">设定</button>
-    </nav>
 
     <section id="panel-convert" class="panel active">
       <div id="drop-zone" class="drop-zone">
@@ -27,15 +23,15 @@
             <path d="M9 14h6"/>
           </svg>
         </div>
-        <p class="drop-title">把音频或视频拖到这里</p>
-        <p class="drop-sub">也可以一次选多个档案，或选择整个文件夹</p>
+        <p class="drop-title">拖入音频、视频或贴上 YouTube 网址</p>
+        <p class="drop-sub">一段开示，一份清晰的文字稿。支持一次加入多个文件。</p>
         <div class="row actions">
-          <button type="button" class="btn primary" id="btn-files">选择档案…</button>
+          <button type="button" class="btn primary" id="btn-files">选择文件…</button>
           <button type="button" class="btn" id="btn-folder">选择文件夹…</button>
         </div>
       </div>
 
-      <div class="card">
+      <div class="card url-card">
         <label class="field-label" for="youtube-url">YouTube 链接</label>
         <div class="row">
           <input id="youtube-url" type="text" spellcheck="false" placeholder="https://www.youtube.com/watch?v=…" />
@@ -47,7 +43,7 @@
       <div class="card split">
         <div>
           <p class="field-label">语言</p>
-          <div class="radios" id="lang-group">
+          <div class="radios" id="lang-group" role="group" aria-label="语言">
             <label><input type="radio" name="lang" value="zh" checked /> 中文</label>
             <label><input type="radio" name="lang" value="en" /> 英文→中文</label>
             <label><input type="radio" name="lang" value="bo" /> 藏文</label>
@@ -72,16 +68,18 @@
           <div class="bar"><span id="global-bar"></span></div>
           <p id="global-label" class="help"></p>
         </div>
-        <div id="queue-empty" class="empty">还没有档案。选好以后会显示在这里。</div>
-        <ul id="queue" class="queue"></ul>
+        <div id="queue-empty" class="empty"><span class="empty-symbol" aria-hidden="true">≡</span>准备好，便从这里开始<p class="help">加入文件后，可在这里查看进度和打开 Word 文档。</p></div>
+        <ul id="queue" class="queue" aria-label="转换队列"></ul>
       </div>
     </section>
 
-    <section id="panel-settings" class="panel">
+    <dialog id="settings-dialog" aria-labelledby="settings-title">
+      <div class="sheet-head"><div><h2 id="settings-title">设置</h2><p class="help">更改后自动保存，下一次转换生效。</p></div><button class="btn" id="btn-close-settings" type="button">完成</button></div>
+      <section id="panel-settings">
       <div class="card">
         <p class="field-label">修饰模型</p>
         <p class="help">音频一律在本机识别。只有转好的文字才可能送到你选的云端模型。</p>
-        <div class="radios stack" id="provider-group">
+        <div class="radios stack" id="provider-group" role="group" aria-label="修饰模型">
           <label><input type="radio" name="provider" value="local" /> 本地千问（推荐）</label>
           <label><input type="radio" name="provider" value="claude" /> Claude</label>
           <label><input type="radio" name="provider" value="gpt" /> GPT</label>
@@ -89,17 +87,17 @@
         </div>
         <div id="cloud-auth" class="auth hidden">
           <p class="field-label">云端方式</p>
-          <div class="radios" id="auth-group">
+          <div class="radios" id="auth-group" role="group" aria-label="云端认证方式">
             <label><input type="radio" name="auth" value="login" /> 登录已有订阅</label>
-            <label><input type="radio" name="auth" value="api_key" /> 使用 API 金钥</label>
+            <label><input type="radio" name="auth" value="api_key" /> 使用 API 密钥</label>
           </div>
           <p id="login-status" class="help"></p>
           <div class="row">
             <button type="button" class="btn" id="btn-login">打开登录…</button>
           </div>
           <div id="key-row" class="key-row hidden">
-            <input id="api-key" type="password" autocomplete="off" placeholder="在这里粘贴 API 金钥" />
-            <button type="button" class="btn primary" id="btn-save-key">保存金钥</button>
+            <input aria-label="API 密钥" id="api-key" type="password" autocomplete="off" placeholder="在这里粘贴 API 密钥" />
+            <button type="button" class="btn primary" id="btn-save-key">保存密钥</button>
           </div>
         </div>
       </div>
@@ -109,16 +107,17 @@
         <label class="check"><input type="checkbox" id="opt-summary" /> 另外生成「摘要」（默认关闭）</label>
         <label class="check"><input type="checkbox" id="opt-headings" /> 允许模型加小节标题（默认关闭）</label>
         <p class="field-label tight">英文输出</p>
-        <div class="radios" id="english-group">
+        <div class="radios" id="english-group" role="group" aria-label="英文输出">
           <label><input type="radio" name="english" value="bilingual" /> 中英对照</label>
           <label><input type="radio" name="english" value="zh" /> 仅中文</label>
         </div>
       </div>
 
+      <details class="advanced"><summary>高级 <span>识别模型、校对提示词与词库</span></summary>
       <div class="card">
         <p class="field-label">中文识别模型</p>
         <p class="help">佛学微调版用堪布讲课录音和听打稿训练过，佛学术语更准；如果效果不好，可以换回原版。</p>
-        <div class="radios" id="zhasr-group">
+        <div class="radios" id="zhasr-group" role="group" aria-label="中文识别模型">
           <label><input type="radio" name="zhasr" value="buddhist" /> 佛学微调版（默认）</label>
           <label><input type="radio" name="zhasr" value="base" /> 原版 Qwen3-ASR</label>
         </div>
@@ -127,7 +126,7 @@
       <div class="card">
         <p class="field-label">校对提示词</p>
         <p class="help">这段话会放在修饰模型提示词的最前面，本地千问和云端模型都会先读到它。可修改，保存后下次转写生效。</p>
-        <textarea id="lead-prompt" rows="8" spellcheck="false"></textarea>
+        <textarea aria-label="校对提示词" id="lead-prompt" rows="8" spellcheck="false"></textarea>
         <div class="row" style="margin-top:10px">
           <button type="button" class="btn primary" id="btn-save-lead">保存提示词</button>
           <button type="button" class="btn" id="btn-reset-lead">恢复默认</button>
@@ -140,6 +139,7 @@
         <button type="button" class="btn" id="btn-glossary">编辑佛教词库…</button>
       </div>
 
+      </details>
       <div class="card">
         <p class="field-label">Word 模板</p>
         <p class="help">当前：<span id="template-name">默认版式</span></p>
@@ -149,7 +149,19 @@
         </div>
       </div>
     </section>
-
+    </dialog>
+    <dialog id="welcome-dialog" aria-labelledby="welcome-title">
+      <div class="welcome-mark" aria-hidden="true">闻</div><p class="eyebrow">欢迎使用为我闻思</p><h2 id="welcome-title">选择文字修饰方式</h2>
+      <p class="help">音频始终在本机识别。修饰会整理分段、修正用词，让文稿更易阅读。</p>
+      <fieldset class="welcome-options"><legend class="sr-only">修饰模型</legend>
+        <label><input type="radio" name="welcome-provider" value="local" checked><span><strong>本地千问</strong><small>推荐 · 文字留在本机，需在 LM Studio 载入千问模型</small></span></label>
+        <label><input type="radio" name="welcome-provider" value="claude"><span><strong>Claude</strong><small>使用已有订阅或 API 密钥</small></span></label>
+        <label><input type="radio" name="welcome-provider" value="gpt"><span><strong>GPT</strong><small>使用已有订阅或 API 密钥</small></span></label>
+        <label><input type="radio" name="welcome-provider" value="gemini"><span><strong>Gemini</strong><small>使用已有订阅或 API 密钥</small></span></label>
+      </fieldset><p class="help">选择云端时，仅转录后的文字会发送给所选服务。以后可随时在设置中更改。</p>
+      <button id="btn-welcome" class="btn primary" type="button">开始使用</button>
+    </dialog>
+    <footer>音频在本机识别 <span>·</span> Word 文稿，为闻思留存</footer>
     <div id="toast" class="toast hidden" role="status"></div>
   </div>
   <script src="app.js"></script>
