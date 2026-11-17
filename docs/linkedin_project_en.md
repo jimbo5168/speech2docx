@@ -4,6 +4,8 @@ Fine-tuning a local LLM-based Chinese speech-to-text model for Tibetan Buddhist 
 
 This is a non-profit project for Tibetan Buddhist education. Long recorded Chinese lectures need accurate, word-for-word transcripts so students can study them. Off-the-shelf speech recognition kept getting Buddhist terms wrong, so I built a free, fully local tool on my Mac mini (Apple Silicon, 64 GB) that turns lecture audio or video into a formatted Word transcript. No audio ever leaves the machine.
 
+Result: word accuracy on a never-trained lecture went from 76.4% to 92.1% (strict), and the final transcripts score 97.6% on a verbatim-adjusted basis, a 66% cut in strict errors.
+
 What I did
 • Base model: Qwen3-ASR-1.7B, run with MLX in 8-bit on Apple Silicon
 • Fine-tuned it on-device with LoRA on 65 lectures (about 103 hours of audio)
