@@ -99,6 +99,8 @@ Click the Dock or Applications icon to open the window. You can drop files onto 
 5. 队列里会显示「等待 / 转录中 / 校对中 / 修饰中 / 完成 / 失败」。完成后可「打开文档」或「在 Finder 中显示」
 6. 「设定」页可改修饰模型、附录、是否生成摘要或小节标题（默认关闭）、校对提示词、佛教词库和 Word 模板。校对提示词会放在修饰模型提示的最前面。
 
+v3 深色界面，采用酒红侧栏与金色进度和操作控件。
+
 ![主画面](docs/gui-main.png)
 
 ![转换中](docs/gui-processing.png)
