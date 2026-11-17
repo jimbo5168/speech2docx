@@ -17,5 +17,6 @@ find "$APP/Contents/Resources/app" -name __pycache__ -type d -exec rm -rf {} +
 /usr/bin/plutil -insert CFBundlePackageType -string APPL "$APP/Contents/Info.plist"
 /usr/bin/plutil -insert LSMinimumSystemVersion -string 26.0 "$APP/Contents/Info.plist"
 /usr/bin/plutil -insert CFBundleShortVersionString -string 0.6.0 "$APP/Contents/Info.plist"
+/usr/bin/plutil -insert CFBundleVersion -string 0.6.0 "$APP/Contents/Info.plist"
 /usr/bin/codesign --force --deep --sign - "$APP"
 printf '%s\n' "$APP"
