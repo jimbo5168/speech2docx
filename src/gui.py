@@ -31,8 +31,9 @@ from config import (
 from glossary import ensure_glossary
 from media import MEDIA_EXTS
 from paths import asr_home, default_out_dir
-from polish import DEFAULT_LEAD_PROMPT, cli_login_status, keychain_set, login_command
+from polish import local_qwen_available, DEFAULT_LEAD_PROMPT, cli_login_status, keychain_set, login_command
 from settings import first_run_if_needed
+from model_download import Downloader
 from subtitles import is_media_url
 from transcribe import _transcribe_arg
 
@@ -57,7 +58,7 @@ def _adopt_app_identity() -> None:
 
 def _running_inside_app() -> bool:
     parts = " ".join([sys.executable or "", *sys.argv])
-    return "为我闻思.app" in parts or "语音转文字.app" in parts
+    return any(name in parts for name in ("为我闻思.app", "为我闻思 Lite.app", "语音转文字.app"))
 
 
 def _apply_app_icon() -> None:
@@ -81,9 +82,6 @@ def _apply_app_icon() -> None:
 
 LANG_LABELS = {
     "zh": "中文",
-    "en": "英文→中文",
-    "bo": "藏文",
-    "auto": "自动识别",
 }
 
 STAGE_STATUS = {
@@ -178,12 +176,24 @@ class AppState:
         self.jobs: list[dict[str, Any]] = []
         self.busy = False
         self.lang = "zh"
+        self.local_polish_available = False
+        self._polish_probe_busy = False
+        self._polish_probe_at = 0.0
         cfg = load_config()
         out = str(cfg.get("out_dir") or "").strip()
         self.out_dir = Path(out).expanduser() if out else default_out_dir()
 
     def snapshot(self) -> dict[str, Any]:
         cfg = load_config()
+        if not self._polish_probe_busy and time.monotonic() - self._polish_probe_at > 5:
+            self._polish_probe_busy = True
+            def probe():
+                try:
+                    self.local_polish_available = local_qwen_available(cfg)
+                finally:
+                    self._polish_probe_at = time.monotonic()
+                    self._polish_probe_busy = False
+            threading.Thread(target=probe, daemon=True).start()
         status = cli_login_status()
         with self.lock:
             jobs = list(self.jobs)
@@ -197,14 +207,15 @@ class AppState:
             "out_dir": str(out_dir),
             "out_dir_display": display_path(out_dir),
             "settings": {
-                "polish_provider": cfg.get("polish_provider", "local"),
+                "polish_provider": cfg.get("polish_provider", "none"),
+                "local_polish_available": self.local_polish_available,
                 "auth_mode": cfg.get("auth_mode") or {},
-                "include_raw_appendix": bool(cfg.get("include_raw_appendix", True)),
+                "include_raw_appendix": False,
                 "include_summary": bool(cfg.get("include_summary", False)),
                 "include_headings": bool(cfg.get("include_headings", False)),
                 "polish_lead_prompt": (cfg.get("polish_lead_prompt") or "").strip() or DEFAULT_LEAD_PROMPT,
                 "polish_lead_prompt_default": DEFAULT_LEAD_PROMPT,
-                "english_output": cfg.get("english_output") or "bilingual",
+                "english_output": "zh",
                 "zh_asr_model": cfg.get("zh_asr_model") or "buddhist",
                 "template_path": template,
                 "template_display": Path(template).name if template else "默认版式",
@@ -352,6 +363,29 @@ STATE = AppState()
 
 
 class JsApi:
+    def __init__(self):
+        self._model_downloads = None
+        self._download_lock = threading.Lock()
+
+    def _downloads(self):
+        # Lazy creation avoids any network or filesystem work during module import.
+        with self._download_lock:
+            if self._model_downloads is None:
+                self._model_downloads = Downloader(asr_home())
+            return self._model_downloads
+
+    def prepare_model_download(self):
+        return self._downloads().prepare()
+
+    def get_model_download(self):
+        return self._downloads().status()
+
+    def start_model_download(self):
+        return self._downloads().start()
+
+    def pause_model_download(self):
+        return self._downloads().pause()
+
     def get_state(self) -> dict[str, Any]:
         return STATE.snapshot()
 
@@ -459,11 +493,12 @@ class JsApi:
 
     def save_settings(self, payload: dict[str, Any]) -> dict[str, Any]:
         cfg = load_config()
-        provider = str(payload.get("polish_provider") or cfg.get("polish_provider") or "local")
-        if provider in {"local", "claude", "gpt", "gemini"}:
+        provider = str(payload.get("polish_provider") or cfg.get("polish_provider") or "none")
+        if provider in {"none", "local", "claude", "gpt", "gemini"}:
+            if provider == "local" and not STATE.local_polish_available:
+                provider = "none"
+            cfg["local_polish_opt_in"] = provider == "local"
             cfg["polish_provider"] = provider
-        if "include_raw_appendix" in payload:
-            cfg["include_raw_appendix"] = bool(payload.get("include_raw_appendix"))
         if "include_summary" in payload:
             cfg["include_summary"] = bool(payload.get("include_summary"))
         if "include_headings" in payload:
@@ -473,8 +508,6 @@ class JsApi:
             cfg["polish_lead_prompt"] = lead if lead.strip() else DEFAULT_LEAD_PROMPT
         if payload.get("zh_asr_model") in {"buddhist", "base"}:
             cfg["zh_asr_model"] = payload["zh_asr_model"]
-        if payload.get("english_output") in {"bilingual", "zh"}:
-            cfg["english_output"] = payload["english_output"]
         if provider in CLOUD_PROVIDERS and payload.get("auth_mode") in {"login", "api_key"}:
             cfg.setdefault("auth_mode", {})[provider] = payload["auth_mode"]
         cfg["configured"] = True
@@ -745,6 +778,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         _apply_app_icon()
         _focus_window()
         _hide_extra_dock_icon()
+        print("webview shown", flush=True)
 
     window.events.shown += on_shown
     print('starting webview', flush=True)

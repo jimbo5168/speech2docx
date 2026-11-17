@@ -157,15 +157,22 @@ def qwen_ft_path() -> Optional[Path]:
 
 
 def zh_asr_choice() -> str:
-    """'buddhist' (fine-tuned, default) or 'base'. Falls back to base if missing."""
+    """Return the explicitly selected 8-bit ASR model."""
     try:
         from config import load_config
         choice = load_config().get("zh_asr_model", "buddhist")
     except Exception:
         choice = "buddhist"
-    if choice == "buddhist" and qwen_ft_path() is None:
-        return "base"
     return "base" if choice == "base" else "buddhist"
+
+
+def qwen_model_path() -> Path:
+    if zh_asr_choice() == "base":
+        return resolve_hub_snapshot(QWEN_MODEL_ID)
+    path = qwen_ft_path()
+    if path is None:
+        raise RuntimeError("请先在「识别模型」中完成 r3 8-bit 模型下载与验证。")
+    return path
 
 
 def load_qwen():
@@ -173,8 +180,7 @@ def load_qwen():
     if _qwen_model is None:
         os.environ.setdefault("HF_HUB_OFFLINE", "1")
         from mlx_audio.stt import load
-        path = qwen_ft_path() if zh_asr_choice() == "buddhist" else None
-        path = path or resolve_hub_snapshot(QWEN_MODEL_ID)
+        path = qwen_model_path()
         log(f"Loading Qwen3-ASR from {path}")
         t0 = time.perf_counter()
         _qwen_model = load(str(path))
@@ -787,6 +793,9 @@ def _write_docx_plain(
     for run in h.runs:
         set_run_font(run, lang, 18)
 
+    subtitle = doc.add_paragraph("听打稿")
+    for run in subtitle.runs:
+        set_run_font(run, "zh", 12)
     when = datetime.now(TZ).strftime("%Y-%m-%d %H:%M %Z")
     meta = doc.add_paragraph()
     asr_bit = f"    识别：{asr_label}" if asr_label else ""
@@ -838,27 +847,6 @@ def _write_docx_plain(
         r = p.add_run("（未识别到语音内容）")
         set_run_font(r, "zh", 12)
 
-    appendix_parts: list[str] = []
-    if isinstance(raw_appendix, list):
-        appendix_parts = [str(x).strip() for x in raw_appendix if str(x).strip()]
-    elif isinstance(raw_appendix, str) and raw_appendix.strip():
-        appendix_parts = [p.strip() for p in raw_appendix.split("\n") if p.strip()] or [raw_appendix.strip()]
-    if appendix_parts:
-        ah = doc.add_heading("附录：原始转录", level=2)
-        for run in ah.runs:
-            set_run_font(run, "zh", 14)
-        hint = doc.add_paragraph()
-        r = hint.add_run("以下为识别模型的原文，未经修饰，便于对照准确度。")
-        set_run_font(r, "zh", 10)
-        r.italic = True
-        r.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
-        for part in appendix_parts:
-            p = doc.add_paragraph()
-            r = p.add_run(part)
-            set_run_font(r, lang, 11)
-            p.paragraph_format.space_after = Pt(10)
-            p.paragraph_format.line_spacing = 1.35
-
     doc.save(str(dest))
     return dest
 
@@ -877,6 +865,8 @@ def transcribe_file(
     document_title: Optional[str] = None,
     on_progress=None,
 ) -> dict:
+    if lang == "en":
+        raise ValueError("目前仅支持中文讲课，不支持英文转中文")
     ensure_glossary()
     src = src.expanduser().resolve()
     if not src.exists():
@@ -889,7 +879,10 @@ def transcribe_file(
     stem = output_stem or src.stem
     source_name = source_label or ((stem + src.suffix) if output_stem else src.name)
     lang = detect_lang(src, lang)
+    if lang == "en":
+        raise ValueError("目前仅支持中文讲课，不支持英文转中文")
     cfg = load_config()
+    polish = polish or cfg.get("polish_provider") or "none"
     chunk_s = float(cfg.get("chunk_seconds") or 480)
     overlap_s = float(cfg.get("overlap_seconds") or 4)
     jid = job_id_for(src)
@@ -936,8 +929,7 @@ def transcribe_file(
         }
     raw_chunks = job / "raw"
     if lang == "zh":
-        model_path = qwen_ft_path() if zh_asr_choice() == "buddhist" else None
-        model_path = model_path or resolve_hub_snapshot(QWEN_MODEL_ID)
+        model_path = qwen_model_path()
         weights = [
             (p.name, p.stat().st_size, p.stat().st_mtime_ns, p.stat().st_ctime_ns)
             for p in sorted(model_path.glob("*.safetensors"))
@@ -1040,28 +1032,7 @@ def transcribe_file(
     bilingual_pairs: list[dict] | None = None
     title_zh = ""
     if lang == "en":
-        english_paras = [t.strip() for t in working if str(t).strip()]
-        emit_progress(on_progress, "polish", 86, "正在翻译成中文…")
-        if polish == "none":
-            sections = [{"heading": "", "paragraphs": english_paras}]
-            provider_used = "none"
-            notes.append("未修饰，未翻译（可用设定或去掉 --no-polish 来翻译成中文）")
-            log("ENGLISH --no-polish, skip translation")
-        else:
-            tr = translate_english(english_paras, provider=polish, title=stem)
-            provider_used = tr.get("provider_used") or "none"
-            if tr.get("note"):
-                notes.append(tr["note"])
-            bilingual_pairs = tr.get("pairs") or []
-            title_zh = tr.get("title_zh") or ""
-            zh_paras = [p.get("zh") or "" for p in bilingual_pairs if p.get("zh")]
-            heading_zh = tr.get("heading_zh") or ""
-            sections = [{"heading": heading_zh, "paragraphs": zh_paras or english_paras}]
-            if not any(p.get("zh") for p in bilingual_pairs):
-                bilingual_pairs = None
-            if (cfg.get("english_output") or "bilingual") != "bilingual":
-                bilingual_pairs = None
-            log(f"TRANSLATE en->zh via {provider_used} pairs={len(tr.get('pairs') or [])}")
+        raise ValueError("目前仅支持中文讲课，不支持英文转中文")
     else:
         emit_progress(on_progress, "polish", 86, "正在修饰文字…")
         for i, text in enumerate(working):
@@ -1098,7 +1069,6 @@ def transcribe_file(
 
     label_map = {"local": "本地千问", "claude": "Claude", "gpt": "GPT", "gemini": "Gemini", "none": "未修饰"}
     note = "；".join(dict.fromkeys(notes))
-    include_raw = bool(cfg.get("include_raw_appendix", False))
     asr_label = asr_model_label(lang)
     emit_progress(on_progress, "write", 96, "正在生成 Word 文档…")
     docx_path = write_docx(
@@ -1112,7 +1082,7 @@ def transcribe_file(
         duration=duration,
         polish_label=label_map.get(provider_used, provider_used),
         asr_label=asr_label,
-        raw_appendix=texts if include_raw else None,
+        raw_appendix=None,
         proofread_note=proof_note,
         highlight_phrases=highlight_phrases,
         title_zh=title_zh,
@@ -1198,7 +1168,7 @@ def _transcribe_arg(
 def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(prog="transcribe", description="把音频转成 Word 文档，默认保存到下载文件夹。")
     parser.add_argument("files", nargs="*", help="音频/视频文件，或 YouTube 等网址（可多个）")
-    parser.add_argument("--lang", default="auto", help="zh / en / bo / auto")
+    parser.add_argument("--lang", default="auto", help="zh / auto（中文）；bo 仅供后端兼容")
     parser.add_argument("--out", default=str(default_out_dir()), help="输出目录")
     parser.add_argument("--polish", default=None, help="local / claude / gpt / gemini / none（默认用设定）")
     parser.add_argument("--settings", action="store_true", help="打开设定")

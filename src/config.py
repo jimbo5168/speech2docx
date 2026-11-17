@@ -11,7 +11,7 @@ from paths import config_path
 
 DEFAULTS: dict[str, Any] = {
     "configured": False,
-    "polish_provider": "local",
+    "polish_provider": "none",
     "auth_mode": {
         "claude": "login",
         "gpt": "login",
@@ -31,7 +31,7 @@ DEFAULTS: dict[str, Any] = {
     "include_headings": False,
     "polish_lead_prompt": "",
     "template_path": "",
-    "english_output": "bilingual",
+    "english_output": "zh",
     "zh_asr_model": "buddhist",
     "zh_variant_normalization": True,
     "zh_asr_context_enabled": False,
@@ -39,10 +39,11 @@ DEFAULTS: dict[str, Any] = {
     "out_dir": "",
 }
 
-PROVIDERS = ("local", "claude", "gpt", "gemini")
+PROVIDERS = ("none", "local", "claude", "gpt", "gemini")
 CLOUD_PROVIDERS = ("claude", "gpt", "gemini")
 PROVIDER_LABELS = {
-    "local": "本地（LM Studio 千问）",
+    "none": "本地（直接转写）",
+    "local": "千问润色（可选）",
     "claude": "Claude",
     "gpt": "GPT",
     "gemini": "Gemini",
@@ -68,6 +69,13 @@ def load_config() -> dict[str, Any]:
                     data["auth_mode"].update(user["auth_mode"])
         except Exception:
             pass
+    # Retired options are migrated even when old settings enabled them.
+    if data.get("english_output") != "zh" or data.get("include_raw_appendix") is not False:
+        data.update(english_output="zh", include_raw_appendix=False)
+        save_config(data)
+    # Old local defaults require a new explicit opt-in.
+    if data.get("polish_provider") == "local" and not data.get("local_polish_opt_in", False):
+        data["polish_provider"] = "none"
     return data
 
 
@@ -76,5 +84,6 @@ def save_config(data: dict[str, Any]) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     # Never persist secrets if a caller accidentally includes them
     clean = {k: v for k, v in data.items() if k not in {"api_key", "api_keys", "token"}}
+    clean.update(english_output="zh", include_raw_appendix=False)
     path.write_text(json.dumps(clean, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return path

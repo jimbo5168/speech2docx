@@ -19,7 +19,7 @@ from transcribe import AUDIO_EXTS, transcribe_file
 
 TZ = ZoneInfo("America/Los_Angeles")
 DROP_ROOT_NAME = "语音转文字"
-SUBFOLDERS = {"中文": "zh", "英文": "en", "藏文": "bo"}
+SUBFOLDERS = {"中文": "zh"}
 DONE_NAME = "完成"
 IGNORE_SUFFIXES = {".download", ".crdownload", ".part", ".tmp", ".temp", ".icloud", ".srt", ".vtt", ".ass", ".ssa"}
 POLL_SECONDS = 2.0
@@ -51,7 +51,7 @@ tell application "Finder"
     make new folder at desktop with properties {{name:"{DROP_ROOT_NAME}"}}
   end if
   set root to folder "{DROP_ROOT_NAME}" of desktop
-  repeat with subName in {{"中文", "英文", "藏文", "{DONE_NAME}"}}
+  repeat with subName in {{"中文", "{DONE_NAME}"}}
     if not (exists folder subName of root) then
       make new folder at root with properties {{name:(subName as string)}}
     end if
@@ -79,6 +79,8 @@ def list_drop_files() -> list[dict]:
         if len(parts) < 4:
             continue
         folder, path, name, size_s = parts[0], parts[1], parts[2], parts[3]
+        if folder not in SUBFOLDERS:
+            continue
         try:
             size = int(float(size_s))
         except ValueError:

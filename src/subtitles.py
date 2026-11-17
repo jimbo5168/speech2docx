@@ -536,5 +536,5 @@ def format_proofread_note(stats: dict) -> str:
     if un:
         lines.append(f"未能确定（已在正文用黄色标出）：{len(un)} 处")
     if stats.get("trust") == "auto":
-        lines.append("本次使用自动字幕，可信度较低，请以正文黄标和附录原文复核。")
+        lines.append("本次使用自动字幕，可信度较低，请以正文黄标和原音复核。")
     return "\n".join(lines)

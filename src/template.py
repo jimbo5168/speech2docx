@@ -360,6 +360,7 @@ def write_from_template(
     if path is None or not Path(path).is_file():
         raise FileNotFoundError("找不到 Word 模板")
 
+    # raw_appendix is accepted for old callers but is never included in Word output.
     dest.parent.mkdir(parents=True, exist_ok=True)
     doc = Document(str(path))
     _clear_body(doc)
@@ -408,20 +409,6 @@ def write_from_template(
 
     if not wrote_body:
         add_body_paragraph(doc, "（未识别到语音内容）", "zh", indent=False)
-
-    appendix_parts: list[str] = []
-    if isinstance(raw_appendix, list):
-        appendix_parts = [str(x).strip() for x in raw_appendix if str(x).strip()]
-    elif isinstance(raw_appendix, str) and raw_appendix.strip():
-        appendix_parts = [p.strip() for p in raw_appendix.split("\n") if p.strip()] or [raw_appendix.strip()]
-    if appendix_parts:
-        _add_heading(doc, "附录：原始转录")
-        hint = _add_styled_paragraph(doc, STYLE_NORMAL)
-        run = hint.add_run("以下为识别模型的原文，未经修饰，便于对照准确度。")
-        _set_run_font(run, SPEAKER_FONT, 9, italic=True, color=RGBColor(0x55, 0x55, 0x55))
-        _spacing(hint, line=260, after=80)
-        for part in appendix_parts:
-            add_body_paragraph(doc, part, lang, size=10.5, indent=True)
 
     doc.save(str(dest))
     return dest

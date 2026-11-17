@@ -315,34 +315,6 @@ input: :placeholder {
 .radios input {
   margin: 0
 }
-#lang-group {
-  display: flex;
-  gap: 2px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 2px
-}
-#lang-group label {
-  position: relative;
-  padding: 4px 15px;
-  border-radius: 5px;
-  font-size: 12px;
-  cursor: pointer
-}
-#lang-group input {
-  position: absolute;
-  opacity: 0;
-  width: 1px
-}
-#lang-group label:has(:checked) {
-  background: var(--tint);
-  color: var(--ink);
-  box-shadow: 0 1px 3px #0002
-}
-#lang-group label:has(:focus-visible) {
-  outline: 2px solid var(--accent)
-}
 .split .row {
   flex: 1
 }
@@ -694,7 +666,8 @@ textarea {
   clip-path: inset(50%)
 }
 #model-dialog {
-  width: 460px;
+  width: 560px;
+  max-width: calc(100vw - 48px);
   text-align: center
 }
 .model-icon {
@@ -728,9 +701,6 @@ textarea {
   }
   .toolbar {
     padding: 0 24px
-  }
-  #lang-group label {
-    padding: 4px 8px
   }
   .q-actions {
     grid-column: 2;
@@ -859,4 +829,12 @@ input[type="radio"] {
 }
 input[type="radio"]:checked {
   border: 4px solid var(--accent);
+}
+
+#model-label {
+  flex: 1;
+  text-align: left;
+}
+#btn-model-pause {
+  flex-shrink: 0;
 }
