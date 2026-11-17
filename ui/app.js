@@ -210,7 +210,6 @@ function applySettings(state) {
 
 function render(state) {
   if (!state) return;
-  $$(`#lang-group input[value="${state.lang || "zh"}"]`).forEach((el) => { el.checked = true; });
   $("#out-path").textContent = state.out_dir_display || state.out_dir || "~/Downloads";
   $("#out-path").title = state.out_dir || "";
   $(".app").classList.toggle("has-jobs", !!(state.jobs && state.jobs.length));
@@ -338,10 +337,6 @@ function bind() {
     if (e.key === "Enter") call("enqueue_url", $("#youtube-url").value);
   });
   $("#btn-clear").addEventListener("click", () => call("clear_finished"));
-
-  $$("#lang-group input").forEach((el) => {
-    el.addEventListener("change", () => { if (el.checked) call("set_lang", el.value); });
-  });
 
   const saveSettings = (extra) => call("save_settings", Object.assign({
     polish_provider: ($("#provider-group input:checked") || {}).value,

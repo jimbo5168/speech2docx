@@ -36,8 +36,11 @@ class TrimOptionsTests(unittest.TestCase):
                 gui.JsApi().set_lang(lang)
                 self.assertEqual(state.lang, 'zh')
         html = (Path(__file__).resolve().parents[1] / 'ui/index.html').read_text()
-        for retired in ('opt-appendix', 'english-group', 'value="bo"', 'value="en"'):
+        for retired in ('opt-appendix', 'english-group', 'lang-group', '语言', 'value="bo"', 'value="en"'):
             self.assertNotIn(retired, html)
+        self.assertIn('id="out-path"', html)
+        for filename in ("app.js", "styles.css"):
+            self.assertNotIn("lang-group", (Path(__file__).resolve().parents[1] / "ui" / filename).read_text())
 
     def test_english_rejected_before_processing(self):
         with patch.object(transcribe, 'translate_english', side_effect=AssertionError('translation')):
