@@ -13,6 +13,48 @@ struct CommandError: Error, CustomStringConvertible {
     let description: String
 }
 
+// Kept independent of AppKit lifecycle so the real probe can run in the test harness.
+func probeRuntimeSources(_ sources: [String], path: String,
+                         checkPaused: () throws -> Void,
+                         report: (String) -> Void) throws -> [String] {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    var workers: [(String, Process, Pipe, URL)] = []
+    defer { for (_, process, _, _) in workers where process.isRunning { process.terminate(); process.waitUntilExit() } }
+    for (index, base) in sources.enumerated() {
+        try checkPaused()
+        let process = Process()
+        let output = Pipe()
+        let file = directory.appendingPathComponent(String(index))
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/curl")
+        process.arguments = ["--silent", "--fail", "--location", "--connect-timeout", "5",
+                             "--max-time", "10", "--range", "0-262143", "--max-filesize", "262144",
+                             "--output", file.path, "--write-out", "%{time_total}", base + path]
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+        workers.append((base, process, output, file))
+    }
+    while workers.contains(where: { $0.1.isRunning }) {
+        try checkPaused()
+        Thread.sleep(forTimeInterval: 0.05)
+    }
+    var results: [(String, Double)] = []
+    for (base, process, output, file) in workers {
+        process.waitUntilExit()
+        let seconds = Double(String(data: output.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? "") ?? .infinity
+        let bytes = (try? FileManager.default.attributesOfItem(atPath: file.path)[.size] as? NSNumber)?.intValue ?? 0
+        let reachable = process.terminationStatus == 0 && bytes == 262144 && seconds.isFinite
+        report("Runtime probe \(base): status=\(process.terminationStatus) bytes=\(bytes) seconds=\(seconds)")
+        results.append((base, reachable ? seconds : .infinity))
+    }
+    // Stable ordering keeps every failed probe available as a download fallback.
+    return results.enumerated().sorted {
+        $0.element.1 == $1.element.1 ? $0.offset < $1.offset : $0.element.1 < $1.element.1
+    }.map { $0.element.0 }
+}
+
 final class Bootstrap: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let fm = FileManager.default
     let resources = Bundle.main.resourceURL!
@@ -171,6 +213,15 @@ final class Bootstrap: NSObject, NSApplicationDelegate, NSWindowDelegate {
         stateLock.lock(); child = nil; stateLock.unlock()
         guard process.terminationStatus == 0 else { throw CommandError(status: process.terminationStatus, description: "准备失败，请重试。详情见 \(log.path)") }
     }
+    func logRuntime(_ message: String) {
+        let log = home.appendingPathComponent("work/bootstrap.log")
+        if !fm.fileExists(atPath: log.path) { fm.createFile(atPath: log.path, contents: nil) }
+        if let handle = try? FileHandle(forWritingTo: log) {
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: Data((message + "\n").utf8))
+        }
+    }
     func digest(_ url: URL) throws -> String {
         let input = try FileHandle(forReadingFrom: url)
         defer { try? input.close() }
@@ -200,10 +251,12 @@ final class Bootstrap: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     try fm.removeItem(at: part!)
                 }
             }
-            for base in sources where !verified {
+            let ranked = verified ? sources : try probeRuntimeSources(sources, path: entry.path, checkPaused: checkPaused, report: logRuntime)
+            for base in ranked where !verified {
                 for _ in 0..<2 {
                     do {
-                        try run("/usr/bin/curl", ["--fail", "--location", "--connect-timeout", "15", "--speed-limit", "1024", "--speed-time", "30", "--continue-at", "-", "--output", part!.path, base + entry.path])
+                        logRuntime("Runtime download source: " + base)
+                        try run("/usr/bin/curl", ["--fail", "--location", "--connect-timeout", "5", "--speed-limit", "1024", "--speed-time", "30", "--continue-at", "-", "--output", part!.path, base + entry.path])
                         guard fileSize(part!) == entry.size, try digest(part!) == entry.sha256 else {
                             try? fm.removeItem(at: part!)
                             throw SetupError(description: "运行环境校验失败")
