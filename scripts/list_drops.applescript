@@ -2,7 +2,7 @@ tell application "Finder"
   if not (exists folder "语音转文字" of desktop) then return ""
   set root to folder "语音转文字" of desktop
   set out to {}
-  set folderNames to {"中文", "藏文"}
+  set folderNames to {"中文"}
   repeat with i from 1 to count of folderNames
     set sName to item i of folderNames
     if exists folder sName of root then

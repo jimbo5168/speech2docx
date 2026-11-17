@@ -20,6 +20,6 @@
   "include_headings": false,
   "polish_lead_prompt": "",
   "template_path": "",
-  "english_output": "bilingual",
+  "english_output": "zh",
   "out_dir": ""
 }

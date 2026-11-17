@@ -82,9 +82,6 @@ def _apply_app_icon() -> None:
 
 LANG_LABELS = {
     "zh": "中文",
-    "en": "英文→中文",
-    "bo": "藏文",
-    "auto": "自动识别",
 }
 
 STAGE_STATUS = {
@@ -213,12 +210,12 @@ class AppState:
                 "polish_provider": cfg.get("polish_provider", "none"),
                 "local_polish_available": self.local_polish_available,
                 "auth_mode": cfg.get("auth_mode") or {},
-                "include_raw_appendix": bool(cfg.get("include_raw_appendix", True)),
+                "include_raw_appendix": False,
                 "include_summary": bool(cfg.get("include_summary", False)),
                 "include_headings": bool(cfg.get("include_headings", False)),
                 "polish_lead_prompt": (cfg.get("polish_lead_prompt") or "").strip() or DEFAULT_LEAD_PROMPT,
                 "polish_lead_prompt_default": DEFAULT_LEAD_PROMPT,
-                "english_output": cfg.get("english_output") or "bilingual",
+                "english_output": "zh",
                 "zh_asr_model": cfg.get("zh_asr_model") or "buddhist",
                 "template_path": template,
                 "template_display": Path(template).name if template else "默认版式",
@@ -502,8 +499,6 @@ class JsApi:
                 provider = "none"
             cfg["local_polish_opt_in"] = provider == "local"
             cfg["polish_provider"] = provider
-        if "include_raw_appendix" in payload:
-            cfg["include_raw_appendix"] = bool(payload.get("include_raw_appendix"))
         if "include_summary" in payload:
             cfg["include_summary"] = bool(payload.get("include_summary"))
         if "include_headings" in payload:
@@ -513,8 +508,6 @@ class JsApi:
             cfg["polish_lead_prompt"] = lead if lead.strip() else DEFAULT_LEAD_PROMPT
         if payload.get("zh_asr_model") in {"buddhist", "base"}:
             cfg["zh_asr_model"] = payload["zh_asr_model"]
-        if payload.get("english_output") in {"bilingual", "zh"}:
-            cfg["english_output"] = payload["english_output"]
         if provider in CLOUD_PROVIDERS and payload.get("auth_mode") in {"login", "api_key"}:
             cfg.setdefault("auth_mode", {})[provider] = payload["auth_mode"]
         cfg["configured"] = True

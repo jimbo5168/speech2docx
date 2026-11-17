@@ -45,9 +45,6 @@
           <p class="field-label">语言</p>
           <div class="radios" id="lang-group" role="group" aria-label="语言">
             <label><input type="radio" name="lang" value="zh" checked /> 中文</label>
-            <label><input type="radio" name="lang" value="en" /> 英文→中文</label>
-            <label><input type="radio" name="lang" value="bo" /> 藏文</label>
-            <label><input type="radio" name="lang" value="auto" /> 自动识别</label>
           </div>
         </div>
         <div>
@@ -106,14 +103,8 @@
       </div>
 
       <div class="card">
-        <label class="check"><input type="checkbox" id="opt-appendix" /> 在文档末尾附上「附录：原始转录」</label>
         <label class="check"><input type="checkbox" id="opt-summary" /> 另外生成「摘要」（默认关闭）</label>
         <label class="check"><input type="checkbox" id="opt-headings" /> 允许模型加小节标题（默认关闭）</label>
-        <p class="field-label tight">英文输出</p>
-        <div class="radios" id="english-group" role="group" aria-label="英文输出">
-          <label><input type="radio" name="english" value="bilingual" /> 中英对照</label>
-          <label><input type="radio" name="english" value="zh" /> 仅中文</label>
-        </div>
       </div>
 
       <details class="advanced"><summary>高级 <span>识别模型、校对提示词与词库</span></summary>

@@ -10,7 +10,7 @@
 
 Local speech-to-text for macOS on Apple Silicon. Drop an MP3, M4A, WAV, or a video (MP4, MOV, MKV, WEBM, …) onto the app icon or a Desktop folder and a formatted Word document appears in Downloads. Video files are converted by extracting the soundtrack first. If subtitles are embedded, sit in a sidecar file, or come from a YouTube URL, they are aligned with the ASR text for proofreading; unresolved disagreements are highlighted in yellow.
 
-Audio is transcribed only on the machine. The first-run chooser preselects Local (LM Studio Qwen) so you can check accuracy before switching to a cloud model. The Word file contains only the title, the 来源 (source) line and the transcript; an optional appendix with the unpolished ASR text (附录：原始转录) can be turned on in Settings. English audio is transcribed, optionally proofread against English subtitles, then translated into Simplified Chinese with the Buddhist glossary (bodhicitta → 菩提心). The Word file is a two-column English/Chinese layout by default. Documents use a bundled typography template (A5, header banner, footer page numbers, 华文行楷 titles and 宋体 body). Choose your own template in Settings if you like. Optional polishing can use Local, or a signed-in Claude / ChatGPT / Gemini subscription, or an API key.
+Audio is transcribed only on the machine. Chinese lectures produce Chinese Word documents with title, 听打稿, source and transcript body, without a raw-transcript appendix. Tibetan mantras within Chinese lectures retain Tibetan script. Local transcription is the default; optional polishing and the model download sheet remain available. Documents use the bundled A5 typography template; custom templates can be selected in Settings.
 
 ## 评测结果 Evaluation results
 
@@ -44,17 +44,15 @@ Audio is transcribed only on the machine. The first-run chooser preselects Local
 - **原字幕直出**：优先采用同名 SRT/VTT/ASS/SSA，其次提取内嵌文字字幕，直接生成同名 SRT 和当前模板的 Word，注明「本稿直接采用原字幕（信任原字幕），未经转写与校对」。跳过语音识别和润色。无可用文字字幕时沿用语音识别，不处理图像字幕或烧录字幕。
 
 - **中文识别**：默认佛学微调版 r3（Qwen3-ASR-1.7B LoRA，MLX 8-bit）。留出讲调整分 97.56%，四讲调整平均 97.44%。详见 [评测记录](docs/ASR评测记录.md)
-- **藏文识别**：`tenzin/whisper-small-tibetan-ct2`（faster-whisper）
 - **长录音**：自动按约 8 分钟分片，可转 2 小时以上，支持中断后续传
 - **视频输入**：可把 MP4 / MOV / MKV / WEBM 等视频拖到应用、桌面文件夹或命令行，会先抽出音轨再转写
 - **字幕校对**：若视频有内嵌字幕、同名的 SRT/VTT/ASS，或命令行给出 YouTube 网址，会把字幕与识别结果对照；能确定的按字幕和佛教词库修正，无法确定的在 Word 里黄标，并写「校对说明」。YouTube 官方字幕优先，自动字幕会标明可信度较低
 - **佛教词库**：可编辑的专有名词表，同时用于识别提示和文字修饰
 - **自动修饰**：修正同音错字、去掉「啊 / 呃 / 嗯」、分段和标题；可加一段标明的「摘要」
-- **只输出 DOCX**：Word 里只有标题、来源和正文，不写时长、转写时间、模型等信息；「附录：原始转录」默认关闭，可在设定中开启。识别初稿同时保存在本机日志目录
-- **英文转中文**：英文录音先转成英文原文，再译成简体中文，佛教词库同样生效（例如 bodhicitta → 菩提心）。若有英文字幕会先校对英文再翻译。默认做成中英对照两栏，也可在设定里改成只出中文。桌面文件夹可把英文放进「英文」
+- **只输出 DOCX**：Word 包含标题、听打稿、来源和正文，不附原始转录。识别初稿保留在本机日志目录。
 - **固定版式**：输出套用内置 Word 模板（约 A5、页眉图案、页脚页码）。标题用华文行楷，讲者与「听打稿」用华文楷体，正文宋体，小节标题黑体。页眉左侧的册名已去掉。可在设定中改用自己的模板，或恢复默认版式
 - **三种用法**：Dock 应用（拖文件）、桌面文件夹、命令行 `transcribe`
-- **默认本机**：第一次使用预选「本地（LM Studio 千问）」，识别和修饰都在本机完成，方便先测准确度
+- **默认本机**：第一次使用预选「本地（直接转写）」，无需润色服务；千问润色可按需开启
 
 ## 环境要求 Requirements
 
@@ -90,14 +88,14 @@ Click the Dock or Applications icon to open the window. You can drop files onto 
 ### 使用方法 How to use
 
 1. 打开「为我闻思」
-2. 选择语言：中文、英文→中文，或藏文
+2. 使用中文讲课模式；讲课中的藏文种子字与咒语保留藏文。
 3. 用下面任一方式加入内容：
    - 把档案拖到窗口里，或点「选择档案…」
    - 点「选择文件夹…」，处理文件夹里的音视频
    - 贴上 YouTube 链接，再点「转换」（有官方字幕时会用来校对）
 4. 需要的话点「更改…」另选输出位置
 5. 队列里会显示「等待 / 转录中 / 校对中 / 修饰中 / 完成 / 失败」。完成后可「打开文档」或「在 Finder 中显示」
-6. 「设定」页可改修饰模型、附录、是否生成摘要或小节标题（默认关闭）、校对提示词、佛教词库和 Word 模板。校对提示词会放在修饰模型提示的最前面。
+6. 「设定」页可改修饰模型、是否生成摘要或小节标题（默认关闭）、校对提示词、佛教词库和 Word 模板。校对提示词会放在修饰模型提示的最前面。
 
 v3 深色界面，采用酒红侧栏与金色进度和操作控件。
 
@@ -118,7 +116,6 @@ v3 深色界面，采用酒红侧栏与金色进度和操作控件。
 `~/Desktop/语音转文字/`（文件夹名保持不变，与应用名不同）
 
 - `中文`：用千问 ASR
-- `藏文`：用藏文 Whisper
 - 原文件会移到 `完成`
 - Word 文档出现在 `~/Downloads`
 
@@ -129,7 +126,6 @@ transcribe lecture.mp3
 transcribe lecture.mp4
 transcribe https://www.youtube.com/watch?v=VIDEO_ID
 transcribe lecture.mp3 --lang zh
-transcribe lecture.mp3 --lang bo
 transcribe lecture.mp3 --polish local
 transcribe lecture.mp3 --polish none
 transcribe --settings

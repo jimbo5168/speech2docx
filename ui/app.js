@@ -184,9 +184,7 @@ function applySettings(state) {
   const auth = (s.auth_mode || {})[provider] || "login";
   $$(`#provider-group input[value="${provider}"]`).forEach((el) => { el.checked = true; });
   $$(`#auth-group input[value="${auth}"]`).forEach((el) => { el.checked = true; });
-  $$(`#english-group input[value="${s.english_output || "bilingual"}"]`).forEach((el) => { el.checked = true; });
   $$(`#zhasr-group input[value="${s.zh_asr_model || "buddhist"}"]`).forEach((el) => { el.checked = true; });
-  $("#opt-appendix").checked = !!s.include_raw_appendix;
   if ($("#opt-summary")) $("#opt-summary").checked = !!s.include_summary;
   if ($("#opt-headings")) $("#opt-headings").checked = !!s.include_headings;
   const leadBox = $("#lead-prompt");
@@ -348,18 +346,15 @@ function bind() {
   const saveSettings = (extra) => call("save_settings", Object.assign({
     polish_provider: ($("#provider-group input:checked") || {}).value,
     auth_mode: ($("#auth-group input:checked") || {}).value,
-    include_raw_appendix: $("#opt-appendix").checked,
     include_summary: !!($("#opt-summary") && $("#opt-summary").checked),
     include_headings: !!($("#opt-headings") && $("#opt-headings").checked),
     polish_lead_prompt: ($("#lead-prompt") && $("#lead-prompt").value) || "",
-    english_output: ($("#english-group input:checked") || {}).value,
     zh_asr_model: ($("#zhasr-group input:checked") || {}).value,
   }, extra || {}));
   $("#lead-prompt").addEventListener("input", () => { $("#lead-prompt").dataset.dirty = "1"; });
-  $$("#provider-group input, #auth-group input, #english-group input, #zhasr-group input").forEach((el) => {
+  $$("#provider-group input, #auth-group input, #zhasr-group input").forEach((el) => {
     el.addEventListener("change", () => saveSettings());
   });
-  $("#opt-appendix").addEventListener("change", () => saveSettings());
   if ($("#opt-summary")) $("#opt-summary").addEventListener("change", () => saveSettings());
   if ($("#opt-headings")) $("#opt-headings").addEventListener("change", () => saveSettings());
   if ($("#btn-save-lead")) $("#btn-save-lead").addEventListener("click", () => saveSettings().then((result) => { if (result) { delete $("#lead-prompt").dataset.dirty; toast("校对提示词已保存"); } }));
